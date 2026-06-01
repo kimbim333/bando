@@ -1,0 +1,504 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Bản Đồ Hệ Thống Thủy Lợi</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<style>
+:root {
+  --bg: #0f172a; --surface: #1e293b; --surface2: #273549;
+  --border: #334155; --accent: #38bdf8; --accent2: #0ea5e9;
+  --text: #f1f5f9; --text2: #94a3b8; --green: #4ade80;
+  --sidebar-w: 300px;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body, html { height: 100%; width: 100%; font-family: Arial, sans-serif; background: var(--bg); color: var(--text); overflow: hidden; }
+
+#app { display: flex; height: 100vh; width: 100vw; }
+#map { flex: 1; height: 100%; z-index: 1; }
+
+/* Sidebar */
+#sidebar {
+  width: var(--sidebar-w); height: 100%; background: var(--bg);
+  border-right: 1px solid var(--border); display: flex;
+  flex-direction: column; z-index: 1000; transition: transform 0.3s ease; flex-shrink: 0;
+}
+
+.sidebar-header { padding: 12px 14px 10px; border-bottom: 1px solid var(--border); background: var(--surface); }
+.sidebar-header h2 { font-size: 13px; font-weight: 700; color: var(--accent); letter-spacing: .04em; text-transform: uppercase; margin-bottom: 2px; }
+.sidebar-header p { font-size: 11px; color: var(--text2); }
+
+/* Upload */
+.upload-zone { padding: 8px 12px; border-bottom: 1px solid var(--border); }
+.nut-upload {
+  display: block; width: 100%; padding: 8px 12px; text-align: center;
+  background: var(--surface2); border: 1.5px dashed var(--accent2);
+  border-radius: 7px; color: var(--accent); font-size: 12px; font-weight: 700;
+  cursor: pointer; transition: all .15s;
+}
+.nut-upload:hover { background: var(--accent2); color: white; border-style: solid; }
+.thong-bao { display: block; text-align: center; font-size: 11px; color: var(--green); margin-top: 5px; min-height: 16px; }
+
+/* Nền bản đồ */
+.layer-section { padding: 8px 12px; border-bottom: 1px solid var(--border); }
+.layer-section label { font-size: 10px; color: var(--text2); font-weight: 700; text-transform: uppercase; letter-spacing: .06em; display: block; margin-bottom: 5px; }
+.layer-btns { display: flex; gap: 5px; }
+.layer-btn {
+  flex: 1; padding: 5px 4px; font-size: 11px; font-weight: 600;
+  border: 1px solid var(--border); border-radius: 5px; background: var(--surface2);
+  color: var(--text2); cursor: pointer; transition: all .15s;
+}
+.layer-btn.active { background: var(--accent2); border-color: var(--accent); color: white; }
+
+/* Vis controls */
+.vis-controls { padding: 7px 12px; border-bottom: 1px solid var(--border); display: flex; gap: 6px; }
+.vis-btn {
+  flex: 1; padding: 5px 8px; font-size: 11px; font-weight: 600;
+  border: 1px solid var(--border); border-radius: 5px; background: var(--surface2);
+  color: var(--text2); cursor: pointer; transition: all .15s;
+}
+.vis-btn:hover { background: var(--border); color: var(--text); }
+
+/* Search */
+.search-box { padding: 7px 12px; border-bottom: 1px solid var(--border); }
+.search-box input {
+  width: 100%; padding: 7px 10px; font-size: 12px;
+  background: var(--surface2); border: 1px solid var(--border);
+  border-radius: 5px; color: var(--text); outline: none;
+}
+.search-box input::placeholder { color: var(--text2); }
+.search-box input:focus { border-color: var(--accent); }
+
+/* Danh sách */
+#danhSachKenh { flex: 1; overflow-y: auto; padding: 5px 8px; }
+#danhSachKenh::-webkit-scrollbar { width: 4px; }
+#danhSachKenh::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+.nhom-header {
+  padding: 8px 6px 3px; font-size: 10px; font-weight: 700;
+  color: var(--text2); text-transform: uppercase; letter-spacing: .06em;
+  border-top: 1px solid var(--border); margin-top: 4px;
+}
+.nhom-header:first-child { border-top: none; margin-top: 0; }
+
+.kenh-item {
+  display: flex; align-items: center; gap: 7px;
+  padding: 6px 8px; margin-bottom: 3px;
+  border-radius: 6px; cursor: pointer;
+  background: var(--surface); border: 1px solid transparent; transition: all .15s;
+}
+.kenh-item:hover { border-color: var(--border); background: var(--surface2); }
+.kenh-item.hidden-layer { opacity: 0.4; }
+.kenh-color { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+.kenh-info { flex: 1; min-width: 0; }
+.kenh-name { font-size: 12px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.kenh-meta { font-size: 10px; color: var(--text2); margin-top: 1px; }
+.icon-btn {
+  background: none; border: none; cursor: pointer;
+  font-size: 13px; color: var(--text2); padding: 2px 3px; flex-shrink: 0;
+}
+.icon-btn:hover { color: var(--accent); }
+
+/* Stats */
+#statsBar {
+  padding: 6px 12px; border-top: 1px solid var(--border);
+  display: flex; gap: 12px; font-size: 11px; color: var(--text2);
+  background: var(--surface);
+}
+#statsBar b { color: var(--accent); }
+
+/* Toggle sidebar (mobile) */
+#btnToggle {
+  position: absolute; top: 12px; left: 12px; z-index: 1100;
+  background: var(--surface); border: 1px solid var(--border);
+  color: var(--text); border-radius: 7px; width: 34px; height: 34px;
+  font-size: 15px; cursor: pointer; display: none;
+  align-items: center; justify-content: center;
+  box-shadow: 0 2px 8px rgba(0,0,0,.5);
+}
+
+/* GPS button */
+#btnGPS {
+  position: absolute; bottom: 22px; right: 12px; z-index: 900;
+  background: var(--accent2); color: white; border: none;
+  border-radius: 10px; padding: 10px 16px; cursor: pointer;
+  font-weight: 700; font-size: 13px;
+  box-shadow: 0 4px 14px rgba(14,165,233,.4);
+  display: flex; align-items: center; gap: 6px;
+}
+#btnGPS:active { background: #0284c7; }
+
+.gps-dot { background: #38bdf8; border: 2px solid white; border-radius: 50%; box-shadow: 0 0 8px #38bdf8; }
+
+/* Popup */
+.my-popup { font-family: Arial, sans-serif; min-width: 200px; padding: 12px 14px; }
+.my-popup .p-title { font-size: 13px; font-weight: 700; color: #0f172a; margin-bottom: 6px; }
+.my-popup .p-km { font-size: 16px; font-weight: 700; color: #0ea5e9; background: #e0f2fe; padding: 4px 10px; border-radius: 6px; display: inline-block; margin-bottom: 7px; }
+.my-popup .p-row { font-size: 12px; color: #334155; margin-bottom: 3px; }
+.my-popup .p-row b { color: #1e293b; }
+.my-popup .p-desc { font-size: 11px; color: #64748b; margin-top: 6px; padding-top: 6px; border-top: 1px solid #e2e8f0; white-space: pre-line; line-height: 1.5; }
+.leaflet-popup-content-wrapper { border-radius: 10px !important; padding: 0 !important; overflow: hidden; }
+.leaflet-popup-content { margin: 0 !important; }
+
+@media (max-width: 640px) {
+  :root { --sidebar-w: 280px; }
+  #sidebar { position: absolute; left: 0; top: 0; box-shadow: 4px 0 20px rgba(0,0,0,.6); }
+  #sidebar.hidden { transform: translateX(-100%); }
+  #btnToggle { display: flex; }
+  #btnToggle.open { left: calc(var(--sidebar-w) + 8px); }
+}
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="sidebar">
+    <div class="sidebar-header">
+      <h2>🌊 Hệ Thống Thủy Lợi</h2>
+      <p id="subTitle">Đang tải dữ liệu...</p>
+    </div>
+
+    <div class="upload-zone">
+      <label for="fileInput" class="nut-upload">📂 Thêm file GeoJSON</label>
+      <input type="file" id="fileInput" accept=".geojson,.json" multiple style="display:none">
+      <span class="thong-bao" id="thongBao"></span>
+    </div>
+
+    <div class="layer-section">
+      <label>Nền bản đồ</label>
+      <div class="layer-btns">
+        <button class="layer-btn active" id="btnOsm">🗺️ OSM</button>
+        <button class="layer-btn" id="btnSat">🛰️ Vệ tinh</button>
+        <button class="layer-btn" id="btnTopo">🏔️ Địa hình</button>
+      </div>
+    </div>
+
+    <div class="vis-controls">
+      <button class="vis-btn" id="btnHienTat">✅ Hiện tất cả</button>
+      <button class="vis-btn" id="btnAnTat">🙈 Ẩn tất cả</button>
+    </div>
+
+    <div class="search-box">
+      <input type="text" id="searchInput" placeholder="🔍 Tìm tên cán bộ, tuyến kênh...">
+    </div>
+
+    <div id="danhSachKenh"></div>
+
+    <div id="statsBar">
+      <span>Hiện: <b id="sVis">0</b></span>
+      <span>Ẩn: <b id="sHid">0</b></span>
+      <span>Tổng: <b id="sTot">0</b></span>
+    </div>
+  </div>
+
+  <div id="map"></div>
+</div>
+
+<button id="btnToggle">☰</button>
+<button id="btnGPS">📍 GPS</button>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+// =============================================
+// DỮ LIỆU GỐC — NHÚNG SẴN
+// =============================================
+var DATA_GOC = {"type":"FeatureCollection","features":[{"type":"Feature","geometry":{"type":"Polygon","coordinates":[[[105.8357390710742,20.92905699134001,0],[105.8344703658155,20.928794974313,0],[105.8337486340885,20.92808005326124,0],[105.8309735516345,20.92559261240138,0],[105.8303406463877,20.92608020455384,0],[105.8292930745419,20.92521675248564,0],[105.8280310907191,20.92414699759441,0],[105.8283979654915,20.92356857697294,0],[105.8272750337113,20.92269439589409,0],[105.8246346082468,20.92479396131881,0],[105.8140991245229,20.91901540952559,0],[105.8127468820777,20.91871406546332,0],[105.8119094829935,20.91792145419665,0],[105.8074074284953,20.91279551870122,0],[105.8063333875142,20.91144331673742,0],[105.8061258191381,20.9108702034193,0],[105.8062571158118,20.91010723943161,0],[105.8064580376249,20.9097554971576,0],[105.807170533501,20.9092566887215,0],[105.8156665915526,20.90250180975956,0],[105.8184805311082,20.90274593725237,0],[105.8220114995004,20.90321467170878,0],[105.8230143284102,20.90322886527299,0],[105.8235588028851,20.90298203591183,0],[105.8247651263927,20.90287617164807,0],[105.8251308078579,20.90270370443208,0],[105.8257393560778,20.90045044297782,0],[105.8266720504268,20.90052201835243,0],[105.8272175812382,20.89920746987583,0],[105.8264577387796,20.89779682453407,0],[105.8285316811063,20.89681115579285,0],[105.8308273685184,20.9007355104177,0],[105.832700377591,20.90155595603163,0],[105.8326166630781,20.90255975926084,0],[105.8327696398571,20.90308740114883,0],[105.832992031233,20.90357675241152,0],[105.8335915797588,20.90395002030925,0],[105.8343656988911,20.90419612508227,0],[105.835099871343,20.9042777939414,0],[105.8377701115301,20.90359884464426,0],[105.841212898666,20.90204631416695,0],[105.8421047486741,20.90180119733818,0],[105.8438534420051,20.90133744152433,0],[105.845700969864,20.90076516118592,0],[105.8475738512246,20.90018012603299,0],[105.8498036250453,20.89941472583072,0],[105.8508220799941,20.89908232782942,0],[105.8522999217278,20.89827991008489,0],[105.8536444740589,20.89697082685448,0],[105.8542791326148,20.89621084548396,0],[105.8546540025652,20.89602820328922,0],[105.8549457732928,20.89559548539679,0],[105.8553174281142,20.8951692255856,0],[105.8562449626519,20.89516787467957,0],[105.8568325477309,20.8951494215997,0],[105.8581979015763,20.89562654507477,0],[105.8591426564398,20.89685059651265,0],[105.8599342943602,20.89812973655735,0],[105.8626125953165,20.90303001219786,0],[105.8600879252599,20.91147271268989,0],[105.859940604497,20.9137889432711,0],[105.8599943622356,20.9178700761979,0],[105.8598163201013,20.92190612267763,0],[105.8591470488762,20.92223383967788,0],[105.8586758358517,20.9224313118804,0],[105.85787422958,20.92246537497048,0],[105.8572964614664,20.92256488529392,0],[105.8569554135936,20.92256540422483,0],[105.8564938036363,20.92259901554634,0],[105.8561763032684,20.92283028788878,0],[105.8553814687573,20.92296371962957,0],[105.8543168613466,20.92323053382714,0],[105.8538610002452,20.92336419997952,0],[105.8532875882203,20.92359837935675,0],[105.8524933112112,20.92383367115331,0],[105.8518193589676,20.92403595883286,0],[105.8500994752741,20.92451141045033,0],[105.8493047017297,20.92490056008031,0],[105.8488198947612,20.92487612639986,0],[105.8485146194401,20.92480116928207,0],[105.8473696688632,20.92435490077561,0],[105.8463116111832,20.92374585472839,0],[105.8456548795195,20.92349316803447,0],[105.8452283237555,20.92316385319603,0],[105.8446520908887,20.92311689598392,0],[105.843978621352,20.92330709166273,0],[105.8422781687332,20.9244316039401,0],[105.8408540213149,20.92511582568466,0],[105.8392542752559,20.92621640983277,0],[105.838080821154,20.92698744418036,0],[105.8370041263645,20.92762479725816,0],[105.8366070609305,20.92777065238991,0],[105.8366067853089,20.9277942248929,0],[105.8364829245919,20.92786075197246,0],[105.8363296855381,20.92796620755076,0],[105.8362171283395,20.92804366698511,0],[105.8361169375091,20.92813644240341,0],[105.8360379543185,20.9282548903118,0],[105.8359356709631,20.92845057306473,0],[105.8358674600053,20.92868661379532,0],[105.8357390710742,20.92905699134001,0]]]},"properties":{"name":"Xã Ng?c H?i","visibility":false,"description":"Xã Ng?c H?i\nDi?n tích d?t t? nhiên : 13,35 km²","styleUrl":"#msn_ylw-pushpin80","fill-opacity":0.5019607843137255,"fill":"#aa55ff","stroke-opacity":1,"stroke":"#000000","icon-scale":1.1,"icon-offset":[20,2],"icon-offset-units":["pixels","pixels"],"icon":"http://maps.google.com/mapfiles/kml/pushpin/ylw-pushpin.png"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[105.821135267372,20.94372677854169,0]},"properties":{"name":"C?ng Ngã 3 Kênh","visibility":false,"description":{"@type":"html","value":"<img style=\"max-width:500px;\" src=\"ngã 3 lách.jpg\">\n0.80x1.50\nK0+520"},"styleUrl":"#msn_blu-blank","icon-scale":1.1,"icon-offset":[32,1],"icon-offset-units":["pixels","pixels"],"icon":"http://maps.google.com/mapfiles/kml/paddle/blu-blank.png"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[105.8201479561046,20.93956215490864,0]},"properties":{"name":"Cu?i Sông Vai C?y","visibility":false,"description":{"@type":"html","value":"<img style=\"max-width:500px;\" src=\"cu?i kênh lách.jpg\">\n1x1.2\nK1+000"},"styleUrl":"#msn_blu-blank","icon-scale":1.1,"icon-offset":[32,1],"icon-offset-units":["pixels","pixels"],"icon":"http://maps.google.com/mapfiles/kml/paddle/blu-blank.png"}},{"type":"Feature","geometry":{"type":"LineString","coordinates":[[105.821152910181,20.94374647423675,0],[105.8212441967575,20.94287785016445,0],[105.8212445179347,20.94278064825782,0],[105.8201473313717,20.9395572253323,0]]},"properties":{"name":"Tr?n Th? M?n","visibility":false,"description":"Ngu?i ph? trách: \tTr?n Th? M?n\nCh?c v?: \tÐ?i Phó\nÐon v? qu?n lý: \tÐ?i Công Trình\nLo?i kênh:\tKênh Lách gara\nKm:\t K0 + 520 d?n K1 +00\nChi?u dài (m) \t480\nÐ?a ph?n \tXã Ð?i Thanh","styleUrl":"#msn_ylw-pushpin0020","stroke-opacity":1,"stroke":"#0000ff","stroke-width":5,"icon-scale":1.1,"icon-offset":[20,2],"icon-offset-units":["pixels","pixels"],"icon":"http://maps.google.com/mapfiles/kml/pushpin/ylw-pushpin.png"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[105.8201190018605,20.9395916288954,0]},"properties":{"name":"C?ng Vai C?y","visibility":false,"description":{"@type":"html","value":"<img style=\"max-width:500px;\" src=\"vai.jpg\">\n1 c?ng phi 0.4\nK1+000"},"styleUrl":"#msn_blu-blank","icon-scale":1.1,"icon-offset":[32,1],"icon-offset-units":["pixels","pixels"],"icon":"http://maps.google.com/mapfiles/kml/paddle/blu-blank.png"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[105.839927,20.9251941,0]},"properties":{"name":"TB Ng?c H?i","visibility":false,"description":{"@type":"html","value":"<img style=\"max-width:500px;\" src=\"z6812883927100_9da5e0248c80602d6bc6e9ee7058d0b9.jpg\">T? máy bom công su?t: 3 x 2.500 m3<br>Ki?u máy: Tr?c d?ng<br>Hình th?c ph?c v?: Tu?i, tiêu<br>C?m: Ð?i QLTN<br>mô t?:\n<br> Nguy?n Quang Dung \n<br>Nguy?n Ng?c Lam\n<br>Lã Ti?n Nh?t\n<br>Nguy?n Van Minh"},"styleUrl":"#msn_ranger_station","icon-scale":1.2,"icon-offset":[0.5,0],"icon-offset-units":["fraction","fraction"],"icon":"http://maps.google.com/mapfiles/kml/shapes/ranger_station.png","T? máy bom công su?t":"3 x 2.500 m3","Ki?u máy":"Tr?c d?ng","Hình th?c ph?c v?":"Tu?i, tiêu","C?m":"Ð?i QLTN","mô t?":""}},{"type":"Feature","geometry":{"type":"Point","coordinates":[105.8812461613744,20.92489635643786,0]},"properties":{"name":"C?ng x? 1 Ðông M?","visibility":false,"description":{"@type":"html","value":"<img style=\"max-width:500px;\" src=\"z6813865454629_ca35dca6638ff0a4a075842d8e81e211.jpg\">\n1 c?a 1,3x1,2 V? trí t?i K6 + 145 trên Kênh Ð?ng Trì - Ðông M? ( nhánh kênh x?)"},"styleUrl":"#msn_blu-blank4","icon-scale":1.1,"icon-offset":[32,1],"icon-offset-units":["pixels","pixels"],"icon":"http://maps.google.com/mapfiles/kml/paddle/blu-blank.png"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[105.8814041042929,20.92512729457018,0]},"properties":{"name":"C?ng x? 2 Ðông M?","visibility":false,"description":{"@type":"html","value":"<img style=\"max-width:500px;\" src=\"z6813865766683_70dcb18697b3b7ffb9012f41f00f5a7d.jpg\">\n1 c?a 1,3x1,2 máy dóng m? V2 V? trí t?i K6 + 155 trên Kênh Ð?ng Trì - Ðông M? ( nhánh kênh x?)"},"styleUrl":"#msn_blu-blank4","icon-scale":1.1,"icon-offset":[32,1],"icon-offset-units":["pixels","pixels"],"icon":"http://maps.google.com/mapfiles/kml/paddle/blu-blank.png"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[105.8559044373011,20.93348999951197,0]},"properties":{"name":"C?ng TB Mô cam","visibility":false,"description":"2 c?a 0,90x1,30 máy dóng m? V0; V? trí: K0 + 00 - Ð?u Nhánh ph?i kênh tu?i Mô Cam","styleUrl":"#msn_grn-blank10","icon-scale":1.1,"icon-offset":[32,1],"icon-offset-units":["pixels","pixels"],"icon":"http://maps.google.com/mapfiles/kml/paddle/grn-blank.png"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[105.8558878008529,20.93351624906608,0]},"properties":{"name":"Tru?c b? x? TB Mô Cam","visibility":false,"description":{"@type":"html","value":"<img style=\"max-width:500px;\" src=\"z6813758673186_79858f1ff59de9d182f2aec194ed38b8.jpg\">\n2 c?a 0,90x1,30 máy dóng m? V0; V? trí: K0 + 00 - Ð?u Nhánh trái kênh tu?i Mô Cam"},"styleUrl":"#msn_grn-blank10","icon-scale":1.1,"icon-offset":[32,1],"icon-offset-units":["pixels","pixels"],"icon":"http://maps.google.com/mapfiles/kml/paddle/grn-blank.png"}},{"type":"Feature","geometry":{"type":"LineString","coordinates":[[105.8803584438261,20.92397979424216,0],[105.8806266148884,20.9241062305075,0],[105.8807108335687,20.92419155542085,0],[105.8817720923388,20.92579093634752,0],[105.882285208921,20.92651550864064,0],[105.8823664293917,20.92676763799728,0],[105.8824032642201,20.92705099924433,0],[105.8822970462851,20.9276899479594,0]]},"properties":{"name":"Nguy?n Ng?c L?i","visibility":false,"description":"Ngu?i ph? trách: Nguy?n Ng?c L?i\nCh?c v?: \tCông nhân\nÐon v? qu?n lý: \tC?m Ðông\nLo?i kênh:\tKênh x? Ðông M?\nKm:\t\nChi?u dài (m) \t\nÐ?a ph?n  \t Nam Phù","styleUrl":"#msn_ylw-pushpin31","stroke-opacity":1,"stroke":"#005500","stroke-width":3.5,"icon-scale":1.1,"icon-offset":[20,2],"icon-offset-units":["pixels","pixels"],"icon":"http://maps.google.com/mapfiles/kml/pushpin/ylw-pushpin.png"}},{"type":"Feature","geometry":{"type":"LineString","coordinates":[[105.854062768136,20.93560778088319,0],[105.8558128952177,20.93364740470892,0],[105.8571124477852,20.93168001607482,0]]},"properties":{"name":"Nguy?n Ng?c L?i 2","visibility":false,"description":"Ngu?i ph? trách: Nguy?n Ng?c L?i\nCh?c v?: \tCông nhân\nÐon v? qu?n lý: \tC?m Ðông\nLo?i kênh:\tKênh tu?i Mô Cam\nKm:\t\nChi?u dài (m) \t\nÐ?a ph?n         Phu?ng Yên S?; Thanh Trì","styleUrl":"#msn_ylw-pushpin8","stroke-opacity":1,"stroke":"#00ff00","stroke-width":3.5,"icon-scale":1.1,"icon-offset":[20,2],"icon-offset-units":["pixels","pixels"],"icon":"http://maps.google.com/mapfiles/kml/pushpin/ylw-pushpin.png"}},{"type":"Feature","geometry":{"type":"LineString","coordinates":[[105.8219450139565,20.9568235441763,0],[105.8214795436382,20.95458228473735,0],[105.8209145851615,20.95299577889487,0],[105.8207472471717,20.95251332367554,0],[105.8197167144742,20.95091978694743,0],[105.8177073273765,20.94794278606379,0],[105.8173721476589,20.94687140115748,0]]},"properties":{"name":"Nguy?n Ng?c Lam","visibility":false,"description":"Ngu?i ph? trách: \tNguy?n Ng?c Lam\nCh?c v?: \tCông nhân\nÐon v? qu?n lý: \tÐ?i Công Trình\nLo?i kênh:\tKênh Hòa Bình\nKm:\t K0 d?n K1 +213\nChi?u dài (m) \t1213\nÐ?a ph?n \tXã Ð?i Thanh","styleUrl":"#msn_ylw-pushpin100","stroke-opacity":1,"stroke":"#0000ff","stroke-width":5,"icon-scale":1.1,"icon-offset":[20,2],"icon-offset-units":["pixels","pixels"],"icon":"http://maps.google.com/mapfiles/kml/pushpin/ylw-pushpin.png"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[105.8207751963749,20.95265576140208,0]},"properties":{"name":"C?ng Tr?m bom Ô ng?","visibility":false,"description":{"@type":"html","value":"<img style=\"max-width:500px;\" src=\"z6812788218252_71f36c43d62e3d9a84bbaf56c5a16726.jpg\">\n2 c?ng phi 800\nK0+480"},"styleUrl":"#msn_blu-diamond3","icon-scale":1.1,"icon-offset":[32,1],"icon-offset-units":["pixels","pixels"],"icon":"http://maps.google.com/mapfiles/kml/paddle/blu-blank.png"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[105.8209759889818,20.95299502081216,0]},"properties":{"name":"c?ng tiêu th?nh niên","visibility":false,"description":{"@type":"html","value":"<img style=\"max-width:500px;\" src=\"z6812785988972_3dde38e322cf0655a777fb5ab66965a4.jpg\">\n2 c?a 0.9x 0.9\nK0+437"},"styleUrl":"#msn_blu-diamond3","icon-scale":1.1,"icon-offset":[32,1],"icon-offset-units":["pixels","pixels"],"icon":"http://maps.google.com/mapfiles/kml/paddle/blu-blank.png"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[105.8214715684294,20.954555117148,0]},"properties":{"name":"C?ng su doàn","visibility":false,"description":{"@type":"html","value":"<img style=\"max-width:500px;\" src=\"z6812782663344_ad68db9f7d4644f0fcdbec79936599a7.jpg\">2 c?ng vuông1.7\tx1.3\nK0+437"},"styleUrl":"#msn_blu-diamond3","icon-scale":1.1,"icon-offset":[32,1],"icon-offset-units":["pixels","pixels"],"icon":"http://maps.google.com/mapfiles/kml/paddle/blu-blank.png"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[105.8197227139102,20.95084832471171,0]},"properties":{"name":"C?u qua du?ng 70","visibility":false,"description":{"@type":"html","value":"<img style=\"max-width:500px;\" src=\"z6812791564114_f45238eeb89341a2bd328ae1d1d43259.jpg\">12.4x6.8\nK0+750"},"styleUrl":"#msn_blu-diamond3","icon-scale":1.1,"icon-offset":[32,1],"icon-offset-units":["pixels","pixels"],"icon":"http://maps.google.com/mapfiles/kml/paddle/blu-blank.png"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[105.8192814636145,20.95032032065714,0]},"properties":{"name":"C?ng Hoa Cà","visibility":false,"description":{"@type":"html","value":"<img style=\"max-width:500px;\" src=\"z6812795908406_60833423e4f016c2d4f766d76a704ad6.jpg\">2.00x2.20\n\nk0+900"},"styleUrl":"#msn_blu-diamond3","icon-scale":1.1,"icon-offset":[32,1],"icon-offset-units":["pixels","pixels"],"icon":"http://maps.google.com/mapfiles/kml/paddle/blu-blank.png"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[105.8176522301718,20.9478824837357,0]},"properties":{"name":"C?ng C?u D?","visibility":false,"description":{"@type":"html","value":"<img style=\"max-width:500px;\" src=\"z6812800145629_753936ecf5dd96e7f8e5b252a4d59340.jpg\">3.00x1.00\nK1+200"},"styleUrl":"#msn_blu-diamond3","icon-scale":1.1,"icon-offset":[32,1],"icon-offset-units":["pixels","pixels"],"icon":"http://maps.google.com/mapfiles/kml/paddle/blu-blank.png"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[105.8380485695482,20.93543367732016,0]},"properties":{"name":"C?ng ch? c?u danh","visibility":false,"description":{"@type":"html","value":"<img style=\"max-width:500px;\" src=\"z6812684155132_679820cafb26ca3a7e738d613e4a1160.jpg\">\n1 máy dóng m? 1.2x1.4\nK1+795"},"styleUrl":"#msn_blu-blank3","icon-scale":1.1,"icon-offset":[32,1],"icon-offset-units":["pixels","pixels"],"icon":"http://maps.google.com/mapfiles/kml/paddle/blu-blank.png"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[105.8380093801833,20.93529079056771,0]},"properties":{"name":"C?ng gi?a kênh","visibility":false,"description":{"@type":"html","value":"<img style=\"max-width:500px;\" src=\"z6812684156703_8bdf2686d587ed4ca9c30cc17afdf23f.jpg\">\n1 c?a 1x1.3\nK1+810"},"styleUrl":"#msn_blu-blank3","icon-scale":1.1,"icon-offset":[32,1],"icon-offset-units":["pixels","pixels"],"icon":"http://maps.google.com/mapfiles/kml/paddle/blu-blank.png"}},{"type":"Feature","geometry":{"type":"LineString","coordinates":[[105.8397996117212,20.93761405884791,0],[105.8393161016513,20.93706812476451,0],[105.8388161135034,20.93649780549773,0],[105.8384383339667,20.93590877581621,0],[105.8380099470114,20.9352984054023,0],[105.8374199448879,20.93429479011451,0],[105.8373642516799,20.93421287989062,0]]},"properties":{"name":"Lã Ti?n Nh?t","visibility":false,"description":"Ngu?i ph? trách: \tLã Ti?n Nh?t\nCh?c v?: \tCông nhân\nÐon v? qu?n lý: \tÐ?i Công Trình\nLo?i kênh:\tKênh Ngân Hàng Sông Om\nKm:\tÐo?n t?  t? K1 + 500 d?n K1+950\nChi?u dài (m) \t450\nÐ?a ph?n \tXã Ð?i Thanh, Thanh Trì","styleUrl":"#msn_ylw-pushpin002","stroke-opacity":1,"stroke":"#0000ff","stroke-width":5,"icon-scale":1.1,"icon-offset":[20,2],"icon-offset-units":["pixels","pixels"],"icon":"http://maps.google.com/mapfiles/kml/pushpin/ylw-pushpin.png"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[105.8357652830224,20.91658195190895,0]},"properties":{"name":"C?ng HTX","visibility":false,"description":"c?ng tròn phi 35","styleUrl":"#m_ylw-pushpin0300","icon-scale":1.1,"icon-offset":[32,1],"icon-offset-units":["pixels","pixels"],"icon":"http://maps.google.com/mapfiles/kml/paddle/blu-blank.png"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[105.835891191414,20.91690141018208,0]},"properties":{"name":"C?ng HTX","visibility":false,"description":"C?ng tròn phi 35","styleUrl":"#m_ylw-pushpin0300","icon-scale":1.1,"icon-offset":[32,1],"icon-offset-units":["pixels","pixels"],"icon":"http://maps.google.com/mapfiles/kml/paddle/blu-blank.png"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[105.8352783745727,20.91550658296451,0]},"properties":{"name":"C?ng HTX","visibility":false,"description":"phi 350","styleUrl":"#m_ylw-pushpin030","icon-scale":1.1,"icon-offset":[32,1],"icon-offset-units":["pixels","pixels"],"icon":"http://maps.google.com/mapfiles/kml/paddle/blu-blank.png"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[105.8358105280093,20.91693201558634,0]},"properties":{"name":"C?ng HTX","visibility":false,"description":"C?ng tròn phi 35","styleUrl":"#m_ylw-pushpin0300","icon-scale":1.1,"icon-offset":[32,1],"icon-offset-units":["pixels","pixels"],"icon":"http://maps.google.com/mapfiles/kml/paddle/blu-blank.png"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[105.8364481810931,20.91849994976447,0]},"properties":{"name":"C?ng HTX","visibility":false,"description":"c?ng tròn phi 35","styleUrl":"#m_ylw-pushpin0300","icon-scale":1.1,"icon-offset":[32,1],"icon-offset-units":["pixels","pixels"],"icon":"http://maps.google.com/mapfiles/kml/paddle/blu-blank.png"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[105.8365904383916,20.9188438626355,0]},"properties":{"name":"C?ng HTX","visibility":false,"description":"C?ng tròn phi 35","styleUrl":"#m_ylw-pushpin0300","icon-scale":1.1,"icon-offset":[32,1],"icon-offset-units":["pixels","pixels"],"icon":"http://maps.google.com/mapfiles/kml/paddle/blu-blank.png"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[105.8371544707501,20.92041591395276,0]},"properties":{"name":"C?ng HTX","visibility":false,"description":"C?ng tròn phi 35","styleUrl":"#m_ylw-pushpin0300","icon-scale":1.1,"icon-offset":[32,1],"icon-offset-units":["pixels","pixels"],"icon":"http://maps.google.com/mapfiles/kml/paddle/blu-blank.png"}},{"type":"Feature","geometry":{"type":"LineString","coordinates":[[105.8352759720698,20.91530579301626,0],[105.8357395057031,20.9166464151312,0],[105.8359434127104,20.91720077869527,0],[105.836427874265,20.91857322885905,0],[105.8378379641792,20.92255390033563,0],[105.8380897576805,20.92292668809637,0],[105.8398139346033,20.92504547416733,0]]},"properties":{"name":"Nguy?n Quang Dung","visibility":false,"description":"Ngu?i ph? trách: \tNguy?n Quang Dung\nCh?c v?: \tTr?m tru?ng\nÐon v? qu?n lý: \tÐ?i Công Trình\nLo?i kênh:\tKênh Ng?c H?i\nKm:\tK0 d?n K1 + 212\nChi?u dài (m) \t1212\nÐ?a ph?n \tXã Ng?c H?i","styleUrl":"#msn_ylw-pushpin100","stroke-opacity":1,"stroke":"#0000ff","stroke-width":5,"icon-scale":1.1,"icon-offset":[20,2],"icon-offset-units":["pixels","pixels"],"icon":"http://maps.google.com/mapfiles/kml/pushpin/ylw-pushpin.png"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[105.8352929400116,20.91528684752051,0]},"properties":{"name":"C?ng lu?n tiêu","visibility":false,"description":{"@type":"html","value":"c?ng lu?n tiêu hèm 135cm<img style=\"max-width:500px;\" src=\"lu?n tiêu.jpg\">"},"styleUrl":"#msn_blu-diamond0","icon-scale":1.1,"icon-offset":[32,1],"icon-offset-units":["pixels","pixels"],"icon":"http://maps.google.com/mapfiles/kml/paddle/blu-blank.png"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[105.8353830462262,20.91540486180396,0]},"properties":{"name":"C?ng ao cá","visibility":false,"description":{"@type":"html","value":"<img style=\"max-width:500px;\" src=\"ao cá.jpg\">\n1x1.4\nK0+15"},"styleUrl":"#msn_blu-diamond0","icon-scale":1.1,"icon-offset":[32,1],"icon-offset-units":["pixels","pixels"],"icon":"http://maps.google.com/mapfiles/kml/paddle/blu-blank.png"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[105.8364173776182,20.91856929263069,0]},"properties":{"name":"C?ng qua kênh","visibility":false,"description":{"@type":"html","value":"<img style=\"max-width:500px;\" src=\"z6812921197406_df5288ef458557cd2f03c51b85d24b24.jpg\">\n3 c?ng tròn phi 800\nK0+372"},"styleUrl":"#msn_blu-diamond","icon-scale":1.1,"icon-offset":[32,1],"icon-offset-units":["pixels","pixels"],"icon":"http://maps.google.com/mapfiles/kml/paddle/blu-blank.png"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[105.8363909641528,20.91863161192935,0]},"properties":{"name":"c?ng vào d?ng Qu?nh dô","visibility":false,"description":{"@type":"html","value":"<img style=\"max-width:500px;\" src=\"44.jpg\">1x1.4\nK0+385"},"styleUrl":"#msn_blu-diamond0","icon-scale":1.1,"icon-offset":[32,1],"icon-offset-units":["pixels","pixels"],"icon":"http://maps.google.com/mapfiles/kml/paddle/blu-blank.png"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[105.8372371941619,20.92103502043027,0]},"properties":{"name":"C?ng tiêu nghia trang","visibility":false,"description":{"@type":"html","value":"<img style=\"max-width:500px;\" src=\"33.jpg\">\n1x1.4\nK0+668"},"styleUrl":"#msn_blu-diamond0","icon-scale":1.1,"icon-offset":[32,1],"icon-offset-units":["pixels","pixels"],"icon":"http://maps.google.com/mapfiles/kml/paddle/blu-blank.png"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[105.8373874312195,20.92103294674757,0]},"properties":{"name":"C?ng vào khu M? Tre","visibility":false,"description":{"@type":"html","value":"<img style=\"max-width:500px;\" src=\"22.jpg\">1x1.4\nK0+668"},"styleUrl":"#msn_blu-diamond0","icon-scale":1.1,"icon-offset":[32,1],"icon-offset-units":["pixels","pixels"],"icon":"http://maps.google.com/mapfiles/kml/paddle/blu-blank.png"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[105.8376050143304,20.92214134194413,0]},"properties":{"name":"c?ng vào Ðám M?","visibility":false,"description":{"@type":"html","value":"<img style=\"max-width:500px;\" src=\"111.jpg\">1x1.4\nk0+800"},"styleUrl":"#msn_blu-diamond0","icon-scale":1.1,"icon-offset":[32,1],"icon-offset-units":["pixels","pixels"],"icon":"http://maps.google.com/mapfiles/kml/paddle/blu-blank.png"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[105.8380915431456,20.92291495703344,0]},"properties":{"name":"C?ng ra Ð?ng L?c Th?","visibility":false,"description":{"@type":"html","value":"<img style=\"max-width:500px;\" src=\"ra dông.jpg\">1x2.4\nk0+896"},"styleUrl":"#msn_blu-diamond0","icon-scale":1.1,"icon-offset":[32,1],"icon-offset-units":["pixels","pixels"],"icon":"http://maps.google.com/mapfiles/kml/paddle/blu-blank.png"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[105.8399215597696,20.92527598929006,0]},"properties":{"name":"C?ng tru?c c?a tr?m bom NG?c H?i","visibility":false,"description":{"@type":"html","value":"<img style=\"max-width:500px;\" src=\"tru?c c?a ng?c h?i.jpg\">có tay quay 4 phai ( m?i bên 2 ) v5\n1.75x2\n K1+200"},"styleUrl":"#msn_red-circle0","icon-scale":1.1,"icon-offset":[32,1],"icon-offset-units":["pixels","pixels"],"icon":"http://maps.google.com/mapfiles/kml/paddle/red-circle.png"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[105.8352359417983,20.91530642297088,0]},"properties":{"name":"CT1 ( VB*-4)","visibility":false,"description":"1.4x1.7\nK0+000","styleUrl":"#msn_blu-diamond2","icon-scale":1.1,"icon-offset":[32,1],"icon-offset-units":["pixels","pixels"],"icon":"http://maps.google.com/mapfiles/kml/paddle/blu-blank.png"}},{"type":"Feature","geometry":{"type":"LineString","coordinates":[[105.8459577762677,20.90534598862459,0],[105.8433665712694,20.90775397413709,0],[105.8417556383485,20.90926053806212,0],[105.8409980414794,20.90994906764022,0]]},"properties":{"name":"Nguy?n Th? Huong Sen","visibility":false,"styleUrl":"#msn_ylw-pushpin003","stroke-opacity":1,"stroke":"#00ff00","stroke-width":5,"icon-scale":1.1,"icon-offset":[20,2],"icon-offset-units":["pixels","pixels"],"icon":"http://maps.google.com/mapfiles/kml/pushpin/ylw-pushpin.png"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[105.840066,20.910682,0]},"properties":{"name":"C?ng b9","visibility":false,"description":{"@type":"html","value":"<img style=\"max-width:500px;\" src=\"z6813567300912_b04a3519ffe03e7514d7f1ca18f03851.jpg\">\nk6+823<br>825m<br>0,50x0,50"},"styleUrl":"#msn_icon-1_1_010","icon-scale":1.1,"icon-offset":[20,30],"icon-offset-units":["pixels","insetPixels"],"icon":"http://maps.google.com/mapfiles/kml/paddle/grn-blank.png"}},{"type":"Feature","geometry":{"type":"LineString","coordinates":[[105.840076,20.910674,0],[105.836746,20.907584,0],[105.834441,20.905492,0]]},"properties":{"name":"Kênh B9","visibility":false,"description":825,"styleUrl":"#msn_ylw-pushpin30","stroke-opacity":1,"stroke":"#00ff00","stroke-width":2}},{"type":"Feature","geometry":{"type":"Point","coordinates":[105.8389189921327,20.90967007800408,0]},"properties":{"name":"b9-2","visibility":false,"description":{"@type":"html","value":"<img style=\"max-width:500px;\" src=\"z6813567300917_317045387ce8e4ba6d56d7852968eda0.jpg\">\n0,50x0,50\nK0+178"},"styleUrl":"#msn_icon-1_1_010","icon-scale":1.1,"icon-offset":[20,30],"icon-offset-units":["pixels","insetPixels"],"icon":"http://maps.google.com/mapfiles/kml/paddle/grn-blank.png"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[105.8364078837182,20.90734228888978,0]},"properties":{"name":"ÐT B9","visibility":false,"description":{"@type":"html","value":"<img style=\"max-width:500px;\" src=\"z6813567300905_b20590d2ebb2de1f8c503ab047fc326b.jpg\">\n1,4x1,3\nK0+482"},"styleUrl":"#msn_icon-1_1_010","icon-scale":1.1,"icon-offset":[20,30],"icon-offset-units":["pixels","insetPixels"],"icon":"http://maps.google.com/mapfiles/kml/paddle/grn-blank.png"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[105.8363330015182,20.90729747694717,0]},"properties":{"name":"b9-4","visibility":false,"description":{"@type":"html","value":"<img style=\"max-width:500px;\" src=\"z6813567317506_2070b5ec25a795824b7504120e263b72.jpg\">\n0,50x0,50\nK0+490"},"styleUrl":"#msn_icon-1_1_010","icon-scale":1.1,"icon-offset":[20,30],"icon-offset-units":["pixels","insetPixels"],"icon":"http://maps.google.com/mapfiles/kml/paddle/grn-blank.png"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[105.8355980034873,20.9066376548116,0]},"properties":{"name":"c?ng qua du?ng nh?a","visibility":false,"description":"1,50x1,00\nK0+647","styleUrl":"#msn_icon-1_1_01","icon-scale":1.1,"icon-offset":[20,30],"icon-offset-units":["pixels","insetPixels"],"icon":"http://maps.google.com/mapfiles/kml/paddle/grn-blank.png"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[105.8363562388774,20.90726102754822,0]},"properties":{"name":"b91","visibility":false,"description":{"@type":"html","value":"<img style=\"max-width:500px;\" src=\"z6813567317502_753878682096268ad46aa6cf3d8cbf7e.jpg\">\n0,50x0,50\nK0+488"},"styleUrl":"#msn_icon-1_1_010","icon-scale":1.1,"icon-offset":[20,30],"icon-offset-units":["pixels","insetPixels"],"icon":"http://maps.google.com/mapfiles/kml/paddle/grn-blank.png"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[105.844820017237,20.90482533691912,0]},"properties":{"name":"VB7-3-2","visibility":false,"description":{"@type":"html","value":"<img style=\"max-width:500px;\" src=\"z6813567300891_ccd8d389c4645aff9238d9d26d1fea52.jpg\">\n0,30x0,30\nK0+155"},"styleUrl":"#msn_icon-1_1_010","icon-scale":1.1,"icon-offset":[20,30],"icon-offset-units":["pixels","insetPixels"],"icon":"http://maps.google.com/mapfiles/kml/paddle/grn-blank.png"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[105.8448466915258,20.90492535267568,0]},"properties":{"name":"VB7-3-1","visibility":false,"description":{"@type":"html","value":"<img style=\"max-width:500px;\" src=\"z6813567300982_4238de4b35fccb19f0d6b513c8a6a910.jpg\">\n0,4x0,4\nK0+134"},"styleUrl":"#msn_icon-1_1_010","icon-scale":1.1,"icon-offset":[20,30],"icon-offset-units":["pixels","insetPixels"],"icon":"http://maps.google.com/mapfiles/kml/paddle/grn-blank.png"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[105.84512,20.906076,0]},"properties":{"name":"C?ng VB 7-3","visibility":false,"description":{"@type":"html","value":"<img style=\"max-width:500px;\" src=\"z6813567300906_d7622cd82e128bbdb1b9dc764d327405.jpg\">\nk6+111<br>0,50x0,50"},"styleUrl":"#msn_icon-1_1_010","icon-scale":1.1,"icon-offset":[20,30],"icon-offset-units":["pixels","insetPixels"],"icon":"http://maps.google.com/mapfiles/kml/paddle/grn-blank.png"}},{"type":"Feature","geometry":{"type":"LineString","coordinates":[[105.845109,20.906076,0],[105.844906,20.905296,0],[105.844824,20.904727,0],[105.844797,20.904379,0],[105.844633,20.903527,0],[105.842757,20.904186,0],[105.842691,20.904398,0],[105.840369,20.905203,0]]},"properties":{"name":"kênh vb7-3 theo thi?t kê là vb 75","visibility":false,"description":705,"styleUrl":"#msn_ylw-pushpin15","stroke-opacity":1,"stroke":"#00ff00","stroke-width":2}},{"type":"Feature","geometry":{"type":"LineString","coordinates":[[105.843299,20.907723,0],[105.842126,20.907675,0]]},"properties":{"name":"Kênh VB7-5","visibility":false,"description":120,"styleUrl":"#msn_ylw-pushpin220","stroke-opacity":1,"stroke":"#00ff00","stroke-width":2}},{"type":"Feature","geometry":{"type":"Point","coordinates":[105.843304,20.907712,0]},"properties":{"name":"C?ng VB7-5","visibility":false,"description":{"@type":"html","value":"<img style=\"max-width:500px;\" src=\"z6813567300907_35030bb2f6a570b1a51a30a29bf78437.jpg\">\nk6+364<br>0,50x0,50"},"styleUrl":"#msn_icon-1_1_010","icon-scale":1.1,"icon-offset":[20,30],"icon-offset-units":["pixels","insetPixels"],"icon":"http://maps.google.com/mapfiles/kml/paddle/grn-blank.png"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[105.8430513977371,20.9077401250148,0]},"properties":{"name":"vb7-5-1","visibility":false,"description":{"@type":"html","value":"<img style=\"max-width:500px;\" src=\"z6813567300987_3566ccbaddb98eb4ab125daa02ff0cbc.jpg\">\n0,30x0,30\nK0+38"},"styleUrl":"#msn_icon-1_1_010","icon-scale":1.1,"icon-offset":[20,30],"icon-offset-units":["pixels","insetPixels"],"icon":"http://maps.google.com/mapfiles/kml/paddle/grn-blank.png"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[105.8430196767547,20.90772733380174,0]},"properties":{"name":"vb7-5-2","visibility":false,"description":{"@type":"html","value":"<img style=\"max-width:500px;\" src=\"z6813567300989_67e2c126e6ae0af696971f5fd38c4abe.jpg\">\n0,30x0,30\nK0+9"},"styleUrl":"#msn_icon-1_1_010","icon-scale":1.1,"icon-offset":[20,30],"icon-offset-units":["pixels","insetPixels"],"icon":"http://maps.google.com/mapfiles/kml/paddle/grn-blank.png"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[105.8422447043591,20.90769868601858,0]},"properties":{"name":"vb7-5-4","visibility":false,"description":"0,30x0,30\nK0+100","styleUrl":"#msn_icon-1_1_01","icon-scale":1.1,"icon-offset":[20,30],"icon-offset-units":["pixels","insetPixels"],"icon":"http://maps.google.com/mapfiles/kml/paddle/grn-blank.png"}},{"type":"Feature","geometry":{"type":"LineString","coordinates":[[105.844594,20.906703,0],[105.844858,20.910552,0]]},"properties":{"name":"kênh VB6-4","visibility":false,"description":"430m","styleUrl":"#msn_ylw-pushpin220","stroke-opacity":1,"stroke":"#00ff00","stroke-width":2}},{"type":"Feature","geometry":{"type":"Point","coordinates":[105.844587,20.906667,0]},"properties":{"name":"C?ng VB6-4","visibility":false,"description":{"@type":"html","value":"<img style=\"max-width:500px;\" src=\"z6813567300919_33831dc023771f4a5c544a045a8f3edf.jpg\">\nk6+193<br>0,50x0,50"},"styleUrl":"#msn_icon-1_1_010","icon-scale":1.1,"icon-offset":[20,30],"icon-offset-units":["pixels","insetPixels"],"icon":"http://maps.google.com/mapfiles/kml/paddle/grn-blank.png"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[105.837893,20.912823,0]},"properties":{"name":"C?ng VB 8-2","visibility":false,"description":{"@type":"html","value":"<img style=\"max-width:500px;\" src=\"z6813567300986_f5f9c63ca8c3d56d9a99cf6be2f801c4.jpg\">\n0,50x0,50\nK7+150"},"styleUrl":"#msn_icon-1_1_010","icon-scale":1.1,"icon-offset":[20,30],"icon-offset-units":["pixels","insetPixels"],"icon":"http://maps.google.com/mapfiles/kml/paddle/grn-blank.png"}},{"type":"Feature","geometry":{"type":"LineString","coordinates":[[105.837902,20.912829,0],[105.838541,20.913658,0],[105.838733,20.914164,0],[105.838791,20.914256,0],[105.838849,20.914473,0],[105.841457,20.921619,0],[105.841543,20.921843,0]]},"properties":{"name":"Kênh Vb 8-2","visibility":false,"description":{"@type":"html","value":"xây 200<br>d?t 1147"},"styleUrl":"#msn_ylw-pushpin30","stroke-opacity":1,"stroke":"#00ff00","stroke-width":2}},{"type":"Feature","geometry":{"type":"LineString","coordinates":[[105.8409955925681,20.90995158166033,0],[105.8352768629874,20.9152432441874,0],[105.8352211919909,20.91528645145748,0]]},"properties":{"name":"Ðinh Th? tHanh Tùng","visibility":false,"styleUrl":"#msn_ylw-pushpin003","stroke-opacity":1,"stroke":"#00ff00","stroke-width":5,"icon-scale":1.1,"icon-offset":[20,2],"icon-offset-units":["pixels","pixels"],"icon":"http://maps.google.com/mapfiles/kml/pushpin/ylw-pushpin.png"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[105.837824,20.912909,0]},"properties":{"name":"C?ng t? ao","visibility":false,"styleUrl":"#icon-ci-1-nodesc11","icon-scale":1.1,"icon-offset":[20,30],"icon-offset-units":["pixels","insetPixels"],"icon":"http://maps.google.com/mapfiles/kml/paddle/grn-blank.png"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[105.83529,20.915283,0]},"properties":{"name":"C?ng CT 1 ( VB84)","visibility":false,"description":{"@type":"html","value":"<img style=\"max-width:500px;\" src=\"z6813567300918_74d08aadee8a53f2fff9dc54b2fac49a.jpg\">\n1,4x1,7"},"styleUrl":"#msn_icon-1_1_010","icon-scale":1.1,"icon-offset":[20,30],"icon-offset-units":["pixels","insetPixels"],"icon":"http://maps.google.com/mapfiles/kml/paddle/grn-blank.png"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[105.83877,20.912008,0]},"properties":{"name":"C?ng DT B8","visibility":false,"description":{"@type":"html","value":"<img style=\"max-width:500px;\" src=\"z6813567300997_cb3f34ae64ad2973fdd57891e80cd7dc.jpg\">\n1.20x2.10\n\nK7+081"},"styleUrl":"#msn_icon-1_1_010","icon-scale":1.1,"icon-offset":[20,30],"icon-offset-units":["pixels","insetPixels"],"icon":"http://maps.google.com/mapfiles/kml/paddle/grn-blank.png"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[105.838773,20.911856,0]},"properties":{"name":"C?ng Vb 9-1","visibility":false,"description":{"@type":"html","value":"<img style=\"max-width:500px;\" src=\"z6813567300978_ab79635de15924da68c47ea46e80b258.jpg\">\nxây 228<br>d?t 144<br>k7+072<br>0,70 x 0,70"},"styleUrl":"#msn_icon-1_1_010","icon-scale":1.1,"icon-offset":[20,30],"icon-offset-units":["pixels","insetPixels"],"icon":"http://maps.google.com/mapfiles/kml/paddle/grn-blank.png"}},{"type":"Feature","geometry":{"type":"LineString","coordinates":[[105.838818,20.911908,0],[105.838294,20.911424,0],[105.837168,20.910492,0],[105.836321,20.909832,0],[105.836044,20.909783,0]]},"properties":{"name":"Kênh VB 9-1","visibility":false,"description":{"@type":"html","value":"kênh xây 228<br>kênh d?t 144"},"styleUrl":"#msn_ylw-pushpin30","stroke-opacity":1,"stroke":"#00ff00","stroke-width":2}},{"type":"Feature","geometry":{"type":"Point","coordinates":[105.8381098686341,20.91127814580267,0]},"properties":{"name":"vb91-1","visibility":false,"description":{"@type":"html","value":"<img style=\"max-width:500px;\" src=\"z6813567317507_50d80d61f596653d3c032cf7c58b38c7.jpg\">\n0,3 x 0,3\nK0+080"},"styleUrl":"#msn_icon-1_1_010","icon-scale":1.1,"icon-offset":[20,30],"icon-offset-units":["pixels","insetPixels"],"icon":"http://maps.google.com/mapfiles/kml/paddle/grn-blank.png"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[105.8374568609487,20.91073840759966,0]},"properties":{"name":"vb9-1-3","visibility":false,"description":{"@type":"html","value":"<img style=\"max-width:500px;\" src=\"z6813567300911_246576b5a413f3e4aed3d09de695cdff.jpg\">\n0,3 x 0,3\nK0+170"},"styleUrl":"#msn_icon-1_1_010","icon-scale":1.1,"icon-offset":[20,30],"icon-offset-units":["pixels","insetPixels"],"icon":"http://maps.google.com/mapfiles/kml/paddle/grn-blank.png"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[105.8377536978745,20.91099872753013,0]},"properties":{"name":"vb9-1-2","visibility":false,"description":{"@type":"html","value":"<img style=\"max-width:500px;\" src=\"z6813567300914_bcfcd64526fc1ec6a3279d0baebf7d57.jpg\">\n0,3 x 0,3\nK0+120"},"styleUrl":"#msn_icon-1_1_010","icon-scale":1.1,"icon-offset":[20,30],"icon-offset-units":["pixels","insetPixels"],"icon":"http://maps.google.com/mapfiles/kml/paddle/grn-blank.png"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[105.838869,20.911952,0]},"properties":{"name":"C?ng b8","visibility":false,"description":{"@type":"html","value":"<img style=\"max-width:500px;\" src=\"z6813567300900_84ca183fd1f42c12703ed1fe0a987cea.jpg\">\n0,60 x 0,60\nK7+072"},"styleUrl":"#msn_icon-1_1_010","icon-scale":1.1,"icon-offset":[20,30],"icon-offset-units":["pixels","insetPixels"],"icon":"http://maps.google.com/mapfiles/kml/paddle/grn-blank.png"}},{"type":"Feature","geometry":{"type":"LineString","coordinates":[[105.838851,20.911952,0],[105.839002,20.912095,0],[105.839211,20.912285,0],[105.839321,20.912387,0],[105.839511,20.912552,0],[105.839532,20.912574,0],[105.841947,20.914782,0],[105.84207,20.914909,0],[105.841846,20.916089,0],[105.841846,20.916387,0]]},"properties":{"name":"Kênh B8","visibility":false,"description":{"@type":"html","value":"100m kênh xây<br>d?t 588 m"},"styleUrl":"#msn_ylw-pushpin30","stroke-opacity":1,"stroke":"#00ff00","stroke-width":2}},{"type":"Feature","geometry":{"type":"Point","coordinates":[105.8392987102823,20.91238259171521,0]},"properties":{"name":"n8-2","visibility":false,"description":{"@type":"html","value":"<img style=\"max-width:500px;\" src=\"z6813567300981_58edd91956214f9c84e9568b2f3d357a.jpg\">\nphi 0,3\nK0+032"},"styleUrl":"#msn_icon-1_1_010","icon-scale":1.1,"icon-offset":[20,30],"icon-offset-units":["pixels","insetPixels"],"icon":"http://maps.google.com/mapfiles/kml/paddle/grn-blank.png"}},{"type":"Feature","geometry":{"type":"LineString","coordinates":[[105.837558,20.913039,0],[105.837398,20.912877,0],[105.836347,20.913841,0],[105.837436,20.912836,0],[105.83738,20.912728,0],[105.837355,20.912658,0],[105.837332,20.912461,0],[105.837314,20.912248,0],[105.837282,20.912129,0],[105.83718,20.911975,0],[105.83709,20.911861,0],[105.836896,20.911726,0],[105.836853,20.911624,0],[105.836826,20.911551,0],[105.836545,20.911344,0]]},"properties":{"name":"kênh VB9-3","visibility":false,"description":"380 xây","styleUrl":"#msn_ylw-pushpin30","stroke-opacity":1,"stroke":"#00ff00","stroke-width":2}},{"type":"Feature","geometry":{"type":"Point","coordinates":[105.837554,20.913031,0]},"properties":{"name":"C?ng VB 9-3","visibility":false,"description":{"@type":"html","value":"<img style=\"max-width:500px;\" src=\"z6813567300945_05f4ec78e4c2291b58004275224c6e92.jpg\">\n0,50x0,50\nK7+188"},"styleUrl":"#msn_icon-1_1_010","icon-scale":1.1,"icon-offset":[20,30],"icon-offset-units":["pixels","insetPixels"],"icon":"http://maps.google.com/mapfiles/kml/paddle/grn-blank.png"}},{"type":"Feature","geometry":{"type":"LineString","coordinates":[[105.8429130799801,20.95014099912115,0],[105.8434839868924,20.94868697073569,0],[105.8436732153158,20.94795535956698,0],[105.8437749469482,20.94732261300864,0],[105.8438868253545,20.94655103153127,0],[105.8438070925499,20.9458055407333,0]]},"properties":{"name":"Nguy?n Van Minh","visibility":false,"description":"Ngu?i ph? trách: Nguy?n Van Minh\nCh?c v?: Công Nhân\nÐon v? qu?n lý: Ð?i Công Trình\nÐo?n T? C?ng Ngân Hàng t?i C?ng Ðu?ng S?t\nChi?u dài (m) 450\nKm: k0-k0+450\nÐ?a ph?n Xã Ð?i Thanh\t\nLo?i kênh Ngân hàng- Sông Om","styleUrl":"#msn_ylw-pushpin100","stroke-opacity":1,"stroke":"#0000ff","stroke-width":5,"icon-scale":1.1,"icon-offset":[20,2],"icon-offset-units":["pixels","pixels"],"icon":"http://maps.google.com/mapfiles/kml/pushpin/ylw-pushpin.png"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[105.842916572823,20.95012920299274,0]},"properties":{"name":"C?ng Ngân hàng","visibility":false,"description":{"@type":"html","value":"<img style=\"max-width:500px;\" src=\"z6815864651688_f0303cb80d28811d73ab27d82e9a9b04.jpg\">\n2 c?a 1.6x1.8\nK0+00"},"styleUrl":"#msn_blu-blank3","icon-scale":1.1,"icon-offset":[32,1],"icon-offset-units":["pixels","pixels"],"icon":"http://maps.google.com/mapfiles/kml/paddle/blu-blank.png"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[105.8153813029271,20.90322914450522,0]},"properties":{"name":"C?ng T? ch?y TB Ð?i Áng","visibility":false,"description":{"@type":"html","value":"<img style=\"max-width:500px;\" src=\"z6814018660029_e1a464be74f626c812d1e5def430a23d.jpg\">1.5x1.65\nK2+512"},"styleUrl":"#msn_red-circle","icon-scale":1.1,"icon-offset":[32,1],"icon-offset-units":["pixels","pixels"],"icon":"http://maps.google.com/mapfiles/kml/paddle/red-circle.png"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[105.815919413487,20.90300703524393,0]},"properties":{"name":"C?ng x? tu?i","visibility":false,"description":{"@type":"html","value":"<img style=\"max-width:500px;\" src=\"z6814045177568_5119dca671f5cfcf62da205c1f52d18f.jpg\">\n1.00x1.45\nK2+512"},"styleUrl":"#msn_red-circle","icon-scale":1.1,"icon-offset":[32,1],"icon-offset-units":["pixels","pixels"],"icon":"http://maps.google.com/mapfiles/kml/paddle/red-circle.png"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[105.8158681282356,20.90283406721773,0]},"properties":{"name":"C?ng x? tiêu","visibility":false,"description":{"@type":"html","value":"<img style=\"max-width:500px;\" src=\"z6814006106405_e6b9ea2b63a153fd855643bcbc50637a.jpg\">K2+512\n1.80x1.50"},"styleUrl":"#msn_red-circle","icon-scale":1.1,"icon-offset":[32,1],"icon-offset-units":["pixels","pixels"],"icon":"http://maps.google.com/mapfiles/kml/paddle/red-circle.png"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[105.8157309,20.9031955,0]},"properties":{"name":"TB Ð?i Áng (tiêu)","visibility":false,"open":1,"description":{"@type":"html","value":"<img style=\"max-width:500px;\" src=\"z6814048677605_45efcf503173cee221ef79b1ac9bc7e1.jpg\">\nT? máy bom công su?t: 4 x 4000, 1x1950 m3<br>Ki?u máy: Tr?c d?ng<br>Hình th?c ph?c v?: Tiêu<br>C?m: C?m th?y nông Mi?n Nam<br>mô t?:\n<br> Ð? Van Th?nh - Tr?m Tru?ng\n<br>Nguy?n H?u Th?o\n<br> Ð? Kh?c Thân\n<br> Nguy?n Ð?c Huy"},"styleUrl":"#icon-1565-01579B-labelson1","icon-scale":1.2,"icon-offset":[0.5,0],"icon-offset-units":["fraction","fraction"],"icon":"http://maps.google.com/mapfiles/kml/shapes/ranger_station.png","T? máy bom công su?t":"5 x 2.500 m3","Ki?u máy":"Tr?c d?ng","Hình th?c ph?c v?":"Tiêu","C?m":"C?m th?y nông Mi?n Nam","mô t?":""}},{"type":"Feature","geometry":{"type":"LineString","coordinates":[[105.8068440005702,20.93638735483178,0],[105.8065382430837,20.93578187395885,0],[105.8072426578396,20.92797948249611,0]]},"properties":{"name":"Nguy?n H?u Th?o","visibility":false,"description":"Ngu?i ph? trách: Nguy?n H?u Th?o\nCh?c v?: \tCông nhân\nÐon v? qu?n lý: \tÐ?i Công trình\nLo?i kênh:\tKênh tiêu Siêu Qu?n\nKm:\t - T? K0 + 893 d?n K1 + 838 C?u vào H? Câu\nChi?u dài (m) \t945,00\nÐ?a ph?n \tÐ?i Thanh","styleUrl":"#msn_ylw-pushpin11","stroke-opacity":1,"stroke":"#00aaff","stroke-width":5,"icon-scale":1.1,"icon-offset":[20,2],"icon-offset-units":["pixels","pixels"],"icon":"http://maps.google.com/mapfiles/kml/pushpin/ylw-pushpin.png"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[105.8068034460819,20.93633502184362,0]},"properties":{"name":"Ðu?ng s?t","visibility":false,"description":{"@type":"html","value":"<img style=\"max-width:500px;\" src=\"z6814251321705_09441cb07ec11967d8ed21b802bc458b.jpg\">\n2 c?a phi 1,3\nK0+893"},"styleUrl":"#msn_ltblu-blank0","icon-scale":1.1,"icon-offset":[32,1],"icon-offset-units":["pixels","pixels"],"icon":"http://maps.google.com/mapfiles/kml/paddle/ltblu-blank.png"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[105.807056283188,20.93069688255055,0]},"properties":{"name":"C?ng Ð?ng Nhân Hoà","visibility":false,"description":{"@type":"html","value":"<img style=\"max-width:500px;\" src=\"z6812500873335_6d5316b992a0ebe7099c024e3f3affba.jpg\">1 c?a 0.9x1 máy dóng m? V1\nk1+745"},"styleUrl":"#msn_ltblu-blank0","icon-scale":1.1,"icon-offset":[32,1],"icon-offset-units":["pixels","pixels"],"icon":"http://maps.google.com/mapfiles/kml/paddle/ltblu-blank.png"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[105.8156166725904,20.94148693995009,0]},"properties":{"name":"C?ng Ðùn","visibility":false,"description":{"@type":"html","value":"<img style=\"max-width:500px;\" src=\"z6812425451949_cdd8491484aa04e8991418b85e0f41b1.jpg\">1.3x1.5\nK0+850"},"styleUrl":"#msn_blu-blank3","icon-scale":1.1,"icon-offset":[32,1],"icon-offset-units":["pixels","pixels"],"icon":"http://maps.google.com/mapfiles/kml/paddle/blu-blank.png"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[105.817611495737,20.94061753354211,0]},"properties":{"name":"Gi?a sông Vai C?y","visibility":false,"description":{"@type":"html","value":"<img style=\"max-width:500px;\" src=\"z6812425471697_11cee39f1b458be5be896bb4e42cc853.jpg\">1 c?ng phi 0.8\nK0+600"},"styleUrl":"#msn_blu-blank3","icon-scale":1.1,"icon-offset":[32,1],"icon-offset-units":["pixels","pixels"],"icon":"http://maps.google.com/mapfiles/kml/paddle/blu-blank.png"}},{"type":"Feature","geometry":{"type":"LineString","coordinates":[[105.8104569748651,20.94374915263437,0],[105.8201177122053,20.93956086871314,0]]},"properties":{"name":"Ð? Kh?c Thân","visibility":false,"description":"Ngu?i ph? trách: \tÐ? Kh?c Thân\nCh?c v?: \tCông nhân\nÐon v? qu?n lý: \tC?m Nam\nLo?i kênh:\t Kênh d?i Thanh  \nKm:\t - Ðo?n t? c?ng d?u lách Gara d?n c?ng ng?m n?i Sông Hòa Bình t? K0 d?n K1 + 440 \nChi?u dài (m) \t 1.096 \nÐ?a ph?n \tÐ?i Thanh","styleUrl":"#msn_ylw-pushpin000","stroke-opacity":1,"stroke":"#0000ff","stroke-width":5,"icon-scale":1.1,"icon-offset":[20,2],"icon-offset-units":["pixels","pixels"],"icon":"http://maps.google.com/mapfiles/kml/pushpin/ylw-pushpin.png"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[105.8157150495776,20.9414669070077,0]},"properties":{"name":"Gi?a d?ng láng Tó","visibility":false,"description":{"@type":"html","value":"<img style=\"max-width:500px;\" src=\"z6812425429554_6669a6e689a562e6a34c25b1f4e236a9.jpg\">2 c?a 1.20x1.60\nmáy dóng m? V2\nK1+835"},"styleUrl":"#msn_blu-blank3","icon-scale":1.1,"icon-offset":[32,1],"icon-offset-units":["pixels","pixels"],"icon":"http://maps.google.com/mapfiles/kml/paddle/blu-blank.png"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[105.8200995786132,20.9395427669507,0]},"properties":{"name":"C?ng sông Vai C?y","visibility":false,"description":{"@type":"html","value":"<img style=\"max-width:500px;\" src=\"z6812425476769_26e48a6967704e1c8462b44e9af52977.jpg\">1.2x1.4\nK0+350"},"styleUrl":"#msn_blu-blank3","icon-scale":1.1,"icon-offset":[32,1],"icon-offset-units":["pixels","pixels"],"icon":"http://maps.google.com/mapfiles/kml/paddle/blu-blank.png"}},{"type":"Feature","geometry":{"type":"LineString","coordinates":[[105.8109041895338,20.91665381322046,0],[105.8090990880289,20.91462608547156,0],[105.8079661641951,20.91330436159377,0],[105.8070197370896,20.91224107001164,0],[105.8061107111452,20.91121245833344,0],[105.8061623571637,20.9105448145469,0],[105.8061957710828,20.91043594969634,0],[105.8062551182414,20.91031631662142,0],[105.806291199553,20.91006255342226,0],[105.8063259282901,20.9099726974005,0]]},"properties":{"name":"Ðu?ng d?n không có tiêu d?","visibility":false,"description":"Ngu?i ph? trách: Ð? Van Th?nh\nCh?c v?: \tTr?m tru?ng\nÐon v? qu?n lý: \tÐ?i Công trình\nLo?i kênh:\tTuy?n sông Hòa Bình\nKm:\t  - T? t? c?ng K4 + 711 d?n K5 + 600 \nChi?u dài (m) \t889\nÐ?a ph?n \tÐ?i Thanh, Thanh Trì","styleUrl":"#msn_ylw-pushpin120","stroke-opacity":1,"stroke":"#0000ff","stroke-width":5,"icon-scale":1.1,"icon-offset":[20,2],"icon-offset-units":["pixels","pixels"],"icon":"http://maps.google.com/mapfiles/kml/pushpin/ylw-pushpin.png"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[105.81089516533,20.9166174605837,0]},"properties":{"name":"C?ng kênh x? TB HB-VT","visibility":false,"description":{"@type":"html","value":"<img style=\"max-width:500px;\" src=\"z6812595508701_e65d8abaa26d9f5dfa47df4b4cb42434.jpg\">2 c?a1.6x1.8\n máy dóng m? V3\nK4+691"},"styleUrl":"#msn_blu-blank3","icon-scale":1.1,"icon-offset":[32,1],"icon-offset-units":["pixels","pixels"],"icon":"http://maps.google.com/mapfiles/kml/paddle/blu-blank.png"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[105.8101744348437,20.91581066625773,0.6319997446040293]},"properties":{"name":"C?ng vào d?ng 80 Vinh Trung","visibility":false,"description":{"@type":"html","value":"<img style=\"max-width:500px;\" src=\"z6812595502967_31ba326e468e77d25c2cb6ac2187ad95.jpg\">\n2 c?a1.6x1.8\n K4+871\n máy dóng m? V3"},"styleUrl":"#msn_blu-blank3","icon-scale":1.1,"icon-offset":[32,1],"icon-offset-units":["pixels","pixels"],"icon":"http://maps.google.com/mapfiles/kml/paddle/blu-blank.png"}},{"type":"Feature","geometry":{"type":"LineString","coordinates":[[105.8218706764248,20.93805750363954,0],[105.8216454703115,20.93839126943677,0],[105.8214547520267,20.93863735882385,0],[105.8212845226834,20.93883691751047,0],[105.8208777319398,20.93912961268782,0],[105.8201284027965,20.93954136469355,0]]},"properties":{"name":"NGuy?n Ð?c Huy","visibility":false,"description":"Ngu?i ph? trách: Nguy?n Ð?c Huy\nCh?c v?: Công nhân\nÐon v? qu?n lý: Ð?i Công trình\nLo?i kênh:\tKênh TTKH Vinh Qu?nh - T? Thanh Oai; Kênh Ð?i Thanh\nKm:\t - T? c?ng nhà tr? Vinh Qu?nh d?n c?ng d?u lách Gara ( nhánh 2) K0+ 316 d?n K1 + 521; 'Kênh d?i Thanh 'Ðo?n T? K0+00 d?n K0+264 \nChi?u dài (m) 1469\nÐ?a ph?n Ð?i Thanh","styleUrl":"#msn_ylw-pushpin110","stroke-opacity":1,"stroke":"#0000ff","stroke-width":5,"icon-scale":1.1,"icon-offset":[20,2],"icon-offset-units":["pixels","pixels"],"icon":"http://maps.google.com/mapfiles/kml/pushpin/ylw-pushpin.png"}},{"type":"Feature","geometry":{"type":"LineString","coordinates":[[105.8218765936135,20.9380594640614,0],[105.8285492090617,20.9388096480086,0],[105.8345390497191,20.93943553754597,0],[105.8346765037981,20.93863861697353,0],[105.8350745901221,20.93604327089504,0]]},"properties":{"name":"Nguy?n Ð?c Huy","visibility":false,"description":"Ngu?i ph? trách: Nguy?n Ð?c Huy\nCh?c v?: \tCông nhân\nÐon v? qu?n lý: \tÐ?i Công trình\nLo?i kênh:\tKênh TTKH Vinh Qu?nh - T? Thanh Oai; Kênh Ð?i Thanh\nKm:\t - T? c?ng nhà tr? Vinh Qu?nh d?n c?ng d?u lách Gara ( nhánh 2) K0+ 316  d?n K1 + 521; 'Kênh d?i Thanh 'Ðo?n T? K0+00 d?n K0+264 \nChi?u dài (m) \t1469\nÐ?a ph?n \tÐ?i Thanh","styleUrl":"#msn_ylw-pushpin0020","stroke-opacity":1,"stroke":"#0000ff","stroke-width":5,"icon-scale":1.1,"icon-offset":[20,2],"icon-offset-units":["pixels","pixels"],"icon":"http://maps.google.com/mapfiles/kml/pushpin/ylw-pushpin.png"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[105.8351001681951,20.93601681134491,0]},"properties":{"name":"C?ng tru?ng M?m Non Qu?nh Ðô","visibility":false,"description":{"@type":"html","value":"<img style=\"max-width:500px;\" src=\"z6812574426833_d4d9adcd672d523a2215c07cd2957c44.jpg\">1 c?a 1,7x1,5 máy dóng m? V1\nk0+320"},"styleUrl":"#msn_blu-blank3","icon-scale":1.1,"icon-offset":[32,1],"icon-offset-units":["pixels","pixels"],"icon":"http://maps.google.com/mapfiles/kml/paddle/blu-blank.png"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[105.8285472122531,20.93880323217473,0]},"properties":{"name":"C?ng nghia trang","visibility":false,"description":{"@type":"html","value":"<img style=\"max-width:500px;\" src=\"z6812574398706_aa38a12a0527a2e411be344ec9d93155.jpg\">1 c?a 1,1x1,2 máy dóng m? V1\n\nK1+100"},"styleUrl":"#msn_blu-blank3","icon-scale":1.1,"icon-offset":[32,1],"icon-offset-units":["pixels","pixels"],"icon":"http://maps.google.com/mapfiles/kml/paddle/blu-blank.png"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[105.8246212187723,20.93833929186492,0]},"properties":{"name":"C?a Mi?u","visibility":false,"description":{"@type":"html","value":"<img style=\"max-width:500px;\" src=\"z6812574412494_3f3f603ad718bf3676d8768ce3770952.jpg\">1 c?a 2.85x2.3 máy dóng m? V2\nK1+470"},"styleUrl":"#msn_blu-blank3","icon-scale":1.1,"icon-offset":[32,1],"icon-offset-units":["pixels","pixels"],"icon":"http://maps.google.com/mapfiles/kml/paddle/blu-blank.png"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[105.840043,20.903286,0]},"properties":{"name":"TB Liên Ninh","visibility":false,"open":1,"description":{"@type":"html","value":"<img style=\"max-width:500px;\" src=\"z6813056764377_a6aeb043eefee1b7e9102f8ea4475631.jpg\">\nT? máy bom công su?t: 3 x 2.500 m3<br>Ki?u máy: Tr?c d?ng<br>Hình th?c ph?c v?: Tiêu<br>C?m: C?m th?y nông Mi?n Ðông<br>mô t?:\n<br>Vu Van Khánh- Tr?m Tru?ng\n<br> Nguy?n Th? Thu Trang"},"styleUrl":"#icon-1565-01579B-labelson1","icon-scale":1.2,"icon-offset":[0.5,0],"icon-offset-units":["fraction","fraction"],"icon":"http://maps.google.com/mapfiles/kml/shapes/ranger_station.png","T? máy bom công su?t":"3 x 2.500 m3","Ki?u máy":"Tr?c d?ng","Hình th?c ph?c v?":"Tiêu","C?m":"C?m th?y nông Mi?n Ðông","mô t?":""}},{"type":"Feature","geometry":{"type":"Point","coordinates":[105.8622844985361,20.9212161944262,0]},"properties":{"name":"Sau c?u vu?t (nhà A.Khánh)","visibility":false,"description":"2 c?a 3,10x2,00\nK5+900","styleUrl":"#msn_blu-blank2","icon-scale":1.1,"icon-offset":[32,1],"icon-offset-units":["pixels","pixels"],"icon":"http://maps.google.com/mapfiles/kml/paddle/blu-blank.png"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[105.8659622301019,20.91770968015354,0]},"properties":{"name":"C?ng vào Làng Om","visibility":false,"description":"1 c?a 1,00x2,00\nK6+300","styleUrl":"#msn_blu-blank2","icon-scale":1.1,"icon-offset":[32,1],"icon-offset-units":["pixels","pixels"],"icon":"http://maps.google.com/mapfiles/kml/paddle/blu-blank.png"}},{"type":"Feature","geometry":{"type":"LineString","coordinates":[[105.8597273460816,20.9222514864893,0],[105.8621693755869,20.92133649182503,0],[105.8624462719378,20.92116762930112,0],[105.8635793621221,20.92044066912345,0],[105.8645339303888,20.91952091075773,0],[105.8654084046775,20.9185799263501,0],[105.8659780175508,20.91779547980022,0]]},"properties":{"name":"Vu Van Khánh","visibility":false,"description":"Ngu?i ph? trách: Vu Van Khánh\nCh?c v?: \tTr?m tru?ng\nÐon v? qu?n lý: \tC?m Ðông\nLo?i kênh:\tTuy?n sông Om\nKm:\tK0 d?n K0+550\nChi?u dài (m) \t 550 \nÐ?a ph?n \tPhu?ng Yên S?; Thanh Trì","styleUrl":"#msn_ylw-pushpin23","stroke-opacity":1,"stroke":"#0000ff","stroke-width":3.5,"icon-scale":1.1,"icon-offset":[20,2],"icon-offset-units":["pixels","pixels"],"icon":"http://maps.google.com/mapfiles/kml/pushpin/ylw-pushpin.png"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[105.8399114666476,20.90319193556697,0]},"properties":{"name":"Tiêu TB Liên Ninh","visibility":false,"description":{"@type":"html","value":"<img style=\"max-width:500px;\" src=\"z6812282425541_26219268e745864c1e1aeb9e48b90bba.jpg\">1 c?a 1.55x1.60\n máy dóng m? V2\nK1+280"},"styleUrl":"#msn_ltblu-blank2","icon-scale":1.1,"icon-offset":[32,1],"icon-offset-units":["pixels","pixels"],"icon":"http://maps.google.com/mapfiles/kml/paddle/ltblu-blank.png"}},{"type":"Feature","geometry":{"type":"LineString","coordinates":[[105.845578825264,20.91194626303192,0],[105.8450784104877,20.91193933620904,0],[105.8445163550906,20.91188285667937,0],[105.844029590023,20.91175497535566,0],[105.8437835015672,20.91161213089561,0],[105.8434575061365,20.91135945441784,0],[105.8431002191502,20.91091130961901,0],[105.8423203432356,20.9100006676182,0],[105.8417444806125,20.90930297617264,0],[105.8410977592322,20.90854402793897,0],[105.8410166332915,20.90837975265587,0],[105.8409353520726,20.90815242356237,0],[105.8408367801465,20.90779496029495,0],[105.8403509667518,20.90521075524894,0],[105.8399503908053,20.90318817192679,0]]},"properties":{"name":"Kênh Liên Ninh (TRang)","visibility":false,"description":"Ngu?i ph? trách: \tNguy?n Th? Thu Trang\nCh?c v?: \tCông nhân\nÐon v? qu?n lý: \tÐ?i Công Trình\nLo?i kênh:\tKênh tiêu Liên Ninh\nKm:\tÐo?n t?  t? K0 d?n K1+280\nChi?u dài (m) \t1280\nÐ?a ph?n \tXã Ng?c H?i","styleUrl":"#msn_ylw-pushpin7","stroke-opacity":1,"stroke":"#00aaff","stroke-width":5,"icon-scale":1.1,"icon-offset":[20,2],"icon-offset-units":["pixels","pixels"],"icon":"http://maps.google.com/mapfiles/kml/pushpin/ylw-pushpin.png"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[105.8417226440848,20.90928588459056,0]},"properties":{"name":"C?ng Ðùn","visibility":false,"description":{"@type":"html","value":"<img style=\"max-width:500px;\" src=\"dùn.jpg\">\n1 c?a   phi 800\nK0+350"},"styleUrl":"#msn_ltblu-blank2","icon-scale":1.1,"icon-offset":[32,1],"icon-offset-units":["pixels","pixels"],"icon":"http://maps.google.com/mapfiles/kml/paddle/ltblu-blank.png"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[105.8455313500077,20.91192944150524,0]},"properties":{"name":"Giáp khu công nghi?p Ng?c H?i","visibility":false,"description":{"@type":"html","value":"<img style=\"max-width:500px;\" src=\"z6813018249396_940f8c55e50f252c9b7566895c088c5b.jpg\">\n2 c?a 2,00x2,00\nK0+000"},"styleUrl":"#msn_ltblu-blank2","icon-scale":1.1,"icon-offset":[32,1],"icon-offset-units":["pixels","pixels"],"icon":"http://maps.google.com/mapfiles/kml/paddle/ltblu-blank.png"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[105.8066155005045,20.91022605170593,0.389378799707757]},"properties":{"name":"B? x? tr?m bom Hoà Bình tiêu","visibility":false,"description":{"@type":"html","value":"<img style=\"max-width:500px;\" src=\"z6814189610672_01d17273dd7a89378ca8b10b9dae3be2.jpg\">\n3 c?a 1.75x1.4 máy dóng m? V2\nK5+600"},"styleUrl":"#msn_red-circle2","icon-scale":1.1,"icon-offset":[32,1],"icon-offset-units":["pixels","pixels"],"icon":"http://maps.google.com/mapfiles/kml/paddle/red-circle.png"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[105.8062048073484,20.91044485164553,0]},"properties":{"name":"6 c?a Hoà Bình","visibility":false,"description":{"@type":"html","value":"<img style=\"max-width:500px;\" src=\"6 c?a.jpg\">\n6 c?a 1.45x2 máy dóng m? V5\nK5+600"},"styleUrl":"#msn_red-circle2","icon-scale":1.1,"icon-offset":[32,1],"icon-offset-units":["pixels","pixels"],"icon":"http://maps.google.com/mapfiles/kml/paddle/red-circle.png"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[105.8067466,20.9103768,0]},"properties":{"name":"Hòa Bình tiêu","visibility":false,"open":1,"description":{"@type":"html","value":"<img style=\"max-width:500px;\" src=\"z6814189605912_6cb54b9cc8cbca4e07022bc9db3a038f.jpg\">\nT? máy bom công su?t: 14 x 2.500 m3<br>Ki?u máy: Tr?c d?ng<br>Hình th?c ph?c v?: Tiêu<br>C?m: C?m th?y nông Mi?n Nam<br>mô t?:\n<br>Ð? Van H?u - Tr?m Tru?ng\n<br>Nguy?n Quang Tu?n\n<br> Nguy?n Th? Bích H?nh\n<br>Ð? Th? Tú\n<br>TR?n Van Thuy?t"},"styleUrl":"#icon-1565-01579B-labelson1","icon-scale":1.2,"icon-offset":[0.5,0],"icon-offset-units":["fraction","fraction"],"icon":"http://maps.google.com/mapfiles/kml/shapes/ranger_station.png","T? máy bom công su?t":"14 x 2.500 m3","Ki?u máy":"Tr?c ngang","Hình th?c ph?c v?":"Tu?i","C?m":"C?m th?y nông Mi?n Nam","mô t?":""}},{"type":"Feature","geometry":{"type":"LineString","coordinates":[[105.8072400486675,20.92797954970611,0],[105.8073396302692,20.92681842208948,0],[105.8074217263478,20.92600611228865,0],[105.8074722876945,20.92522826778149,0],[105.8063996432092,20.92513032381232,0],[105.8041162986052,20.92492951751745,0],[105.802511626648,20.92475552187148,0],[105.8024104699924,20.92473650062666,0],[105.8023449374645,20.92456972681408,0]]},"properties":{"name":"Tr?n Van thuy?t","visibility":false,"description":"Ngu?i ph? trách: Tr?n Van Thuy?t\nCh?c v?: \tCông nhân\nÐon v? qu?n lý: \tÐ?i Công trình\nLo?i kênh:\tKênh tiêu Siêu Qu?n\nKm:\t - T? C?u vào H? Câu d?n c?ng Liên Ki?n, do?n t? K1 + 838 d?n K2 + 701\nChi?u dài (m) \t863,00\nÐ?a ph?n \tÐ?i Thanh","styleUrl":"#msn_ylw-pushpin9","stroke-opacity":1,"stroke":"#00aaff","stroke-width":5,"icon-scale":1.1,"icon-offset":[20,2],"icon-offset-units":["pixels","pixels"],"icon":"http://maps.google.com/mapfiles/kml/pushpin/ylw-pushpin.png"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[105.8075242255467,20.92521702535766,0]},"properties":{"name":"C?ng d?ng siêu qu?n","visibility":false,"description":{"@type":"html","value":"<img style=\"max-width:500px;\" src=\"z6814170895217_4e2e8d945a94c9b9d876d14369e86e38.jpg\">\n1 c?a 1.1x1.2máy dóng m? V2\nK2+150"},"styleUrl":"#msn_ltblu-blank","icon-scale":1.1,"icon-offset":[32,1],"icon-offset-units":["pixels","pixels"],"icon":"http://maps.google.com/mapfiles/kml/paddle/ltblu-blank.png"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[105.8074004529796,20.92521792848584,0]},"properties":{"name":"Xuân Huong","visibility":false,"description":{"@type":"html","value":"<img style=\"max-width:500px;\" src=\"z6814164598595_5cabd11f7a8f3cc1e4e93d0bbcd31d4a.jpg\">\n1 c?a 1.75x1.85\n máy dóng m? V2\nK2+150"},"styleUrl":"#msn_ltblu-blank","icon-scale":1.1,"icon-offset":[32,1],"icon-offset-units":["pixels","pixels"],"icon":"http://maps.google.com/mapfiles/kml/paddle/ltblu-blank.png"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[105.8214517303885,20.91434909891752,0]},"properties":{"name":"C?u Tr?ng","visibility":false,"description":{"@type":"html","value":"<img style=\"max-width:500px;\" src=\"z6812562120276_8ffacbff3738b443fdc7386f56c03e69.jpg\">\n3 c?a  1.00x1.70\nmáy dóng m? V2\nK1+139"},"styleUrl":"#msn_blu-blank6","icon-scale":1.1,"icon-offset":[32,1],"icon-offset-units":["pixels","pixels"],"icon":"http://maps.google.com/mapfiles/kml/paddle/blu-blank.png"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[105.823595686638,20.91855137197241,0]},"properties":{"name":"C?ng C?a Ðình, VInh Trung","visibility":false,"description":{"@type":"html","value":"<img style=\"max-width:500px;\" src=\"z6812562142598_99ca45f78e0c3feab30b7114eb2ad599.jpg\">\n1 c?a 1.3x1.5 máy dóng m? V2\nK0+621"},"styleUrl":"#msn_blu-blank6","icon-scale":1.1,"icon-offset":[32,1],"icon-offset-units":["pixels","pixels"],"icon":"http://maps.google.com/mapfiles/kml/paddle/blu-blank.png"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[105.8235656969083,20.91864387214914,0]},"properties":{"name":"C?ng tiêu Chuôm Cà","visibility":false,"description":{"@type":"html","value":"<img style=\"max-width:500px;\" src=\"z6812562146825_81e05cf43315f8c11beb47ddb8138b13.jpg\">\n1 c?a 1.3x0.8\n máy dóng m? V0\nK0+602"},"styleUrl":"#msn_blu-blank6","icon-scale":1.1,"icon-offset":[32,1],"icon-offset-units":["pixels","pixels"],"icon":"http://maps.google.com/mapfiles/kml/paddle/blu-blank.png"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[105.8248216725215,20.92105774470429,0]},"properties":{"name":"Vinh Th?nh","visibility":false,"description":{"@type":"html","value":"<img style=\"max-width:500px;\" src=\"z6812562133700_1ea09bfd94f372b16e2e5c0d9353a7cb.jpg\">\n1 c?a 1.2x1.8 Máy dóng m? V3\nk0+113"},"styleUrl":"#msn_blu-blank6","icon-scale":1.1,"icon-offset":[32,1],"icon-offset-units":["pixels","pixels"],"icon":"http://maps.google.com/mapfiles/kml/paddle/blu-blank.png"}},{"type":"Feature","geometry":{"type":"LineString","coordinates":[[105.8261522013565,20.92364947797492,0],[105.8248966732277,20.92118526437239,0],[105.8242141204901,20.91981689676701,0],[105.8222240096777,20.91588916891223,0],[105.8215389187476,20.91450338655211,0],[105.8215199306121,20.91446360605544,0],[105.8214519374613,20.9143473708604,0]]},"properties":{"name":"Nguy?n Th? Bích H?nh","visibility":false,"description":"Ngu?i ph? trách: Nguy?n Th? Bích H?nh\nCh?c v?: Công nhân\nÐon v? qu?n lý: \tÐ?i Công Trình\nLo?i kênh:Kênh Tiêu  Ð?i Áng\nKm:- Kênh tiêu Ð?i Áng t? di?m d?u giáp kênh H?ng Vân d?n c?ng tr?ng Vinh Trung K0 d?n K1+146\nChi?u dài (m) \t: 1.146 \nÐ?a ph?n: Ng?c H?i","styleUrl":"#msn_ylw-pushpin000","stroke-opacity":1,"stroke":"#0000ff","stroke-width":5,"icon-scale":1.1,"icon-offset":[20,2],"icon-offset-units":["pixels","pixels"],"icon":"http://maps.google.com/mapfiles/kml/pushpin/ylw-pushpin.png"}},{"type":"Feature","geometry":{"type":"LineString","coordinates":[[105.8125733677011,20.92137864829892,0],[105.8125535381804,20.92006765930984,0],[105.812472979396,20.91898946175581,0],[105.8123860509924,20.91863353519508,0],[105.8122724629013,20.91843011373832,0],[105.8118834004224,20.91783247481417,0],[105.8111669074699,20.91700868307712,0],[105.8108532764521,20.91661232328996,0],[105.8107150282701,20.91646825981261,0]]},"properties":{"name":"Ð? Van H?u","visibility":false,"description":"Ngu?i ph? trách: Ð? Van H?u\nCh?c v?: \tTr?m tru?ng\nÐon v? qu?n lý: \tC?m Nam\nLo?i kênh:\tTuy?n sông Hòa Bình\nKm:\t  - T?  K4 + 111 d?n K4 +711 \nChi?u dài (m) \t600\nÐ?a ph?n \tÐ?i Thanh, Thanh Trì","styleUrl":"#msn_ylw-pushpin000","stroke-opacity":1,"stroke":"#0000ff","stroke-width":5,"icon-scale":1.1,"icon-offset":[20,2],"icon-offset-units":["pixels","pixels"],"icon":"http://maps.google.com/mapfiles/kml/pushpin/ylw-pushpin.png"}},{"type":"Feature","geometry":{"type":"LineString","coordinates":[[105.8126128623902,20.92692416423203,0],[105.8126074660761,20.92628554828728,0],[105.8125830256023,20.92569690373922,0],[105.8126023358719,20.92545200625298,0],[105.812586655041,20.92488950919304,0],[105.8125947679935,20.92459441722954,0],[105.8125781965629,20.92412976251274,0],[105.812594522886,20.92331887772901,0],[105.8125801732516,20.92287639815237,0],[105.8125726243295,20.92159084528532,0],[105.8125639090338,20.92151580799879,0],[105.8125696372042,20.92137788462711,0]]},"properties":{"name":"Ð? Th? Tú","visibility":false,"description":"Ngu?i ph? trách: Ð? Th? Tú\nCh?c v?: \tCông nhân\nÐon v? qu?n lý: \tC?m Nam\nLo?i kênh:\tTuy?n sông Hòa Bình\nKm:\t  - T?  K3 + 511 d?n K4 +111 \nChi?u dài (m) \t 600,0 \nÐ?a ph?n \tÐ?i Thanh, Thanh Trì","styleUrl":"#msn_ylw-pushpin000","stroke-opacity":1,"stroke":"#0000ff","stroke-width":5,"icon-scale":1.1,"icon-offset":[20,2],"icon-offset-units":["pixels","pixels"],"icon":"http://maps.google.com/mapfiles/kml/pushpin/ylw-pushpin.png"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[105.812733706373,20.9213605077601,0]},"properties":{"name":"C?ng sông Bãi","visibility":false,"description":{"@type":"html","value":"<img style=\"max-width:500px;\" src=\"z6812555791388_c5b30c07a3e1911a40096bc698bf13af.jpg\">\n2 c?a 4,0x2,6 máy dóng m? V3\nK4+121"},"styleUrl":"#msn_blu-blank1","icon-scale":1.1,"icon-offset":[32,1],"icon-offset-units":["pixels","pixels"],"icon":"http://maps.google.com/mapfiles/kml/paddle/blu-blank.png"}},{"type":"Feature","geometry":{"type":"LineString","coordinates":[[105.8126648511056,20.93298908245967,0],[105.8126215206251,20.93238167403016,0],[105.8126259369834,20.93154775931468,0],[105.812627250181,20.93058355711431,0],[105.8126360377086,20.92974339047548,0],[105.8126357973082,20.92885651066171,0],[105.8126324180833,20.92793103334587,0],[105.8126012242943,20.92725674926983,0],[105.8125981924873,20.92711140511031,0],[105.8126017788812,20.92704349949659,0],[105.8126054835269,20.92702297530463,0],[105.8126100140498,20.92699268374614,0],[105.812610842262,20.92692685407766,0]]},"properties":{"name":"Nguy?n Quang Tu?n","visibility":false,"description":"Ngu?i ph? trách: Nguy?n Quang Tu?n\nCh?c v?: \tCông nhân\nÐon v? qu?n lý: \tC?m Nam\nLo?i kênh:\tTuy?n sông Hòa Bình\nKm:\t  - T? c?ng Ðu?ng S?t K2+836 d?n K3 + 511 \nChi?u dài (m) \t675\nÐ?a ph?n \tÐ?i Thanh, Thanh Trì","styleUrl":"#msn_ylw-pushpin000","stroke-opacity":1,"stroke":"#0000ff","stroke-width":5,"icon-scale":1.1,"icon-offset":[20,2],"icon-offset-units":["pixels","pixels"],"icon":"http://maps.google.com/mapfiles/kml/pushpin/ylw-pushpin.png"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[105.8127230324043,20.92916615485506,0]},"properties":{"name":"C?ng kênh T^6","visibility":false,"description":{"@type":"html","value":"<img style=\"max-width:500px;\" src=\"z6812424222021_33c6bbc7374a8df783538fd942528917.jpg\">1 c?a 1.2x1.5\n máy dóng m? V2\nK3+264"},"styleUrl":"#msn_blu-blank1","icon-scale":1.1,"icon-offset":[32,1],"icon-offset-units":["pixels","pixels"],"icon":"http://maps.google.com/mapfiles/kml/paddle/blu-blank.png"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[105.8127310268825,20.92712449820255,0]},"properties":{"name":"Qua du?ng s?t","visibility":false,"description":{"@type":"html","value":"<img style=\"max-width:500px;\" src=\"z6811034543940_75542972244b0db29d524c0b3785b3c2.jpg\">\n2 c?a 1.7x2.5\n máy dóng m? V5\nK3+482"},"styleUrl":"#msn_blu-blank1","icon-scale":1.1,"icon-offset":[32,1],"icon-offset-units":["pixels","pixels"],"icon":"http://maps.google.com/mapfiles/kml/paddle/blu-blank.png"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[105.8115395998452,20.91644304772761,0]},"properties":{"name":"TB Hòa Bình ( Vinh Trung) (41)","visibility":false,"description":{"@type":"html","value":"<img style=\"max-width:500px;\" src=\"11111.PNG\">\nT? máy bom công su?t: 3 x 1120 m3<br>Ki?u máy: Tr?c ngang<br>Hình th?c ph?c v?: TTKH<br>C?m: C?m th?y nông Mi?n Nam<br>mô t?:\n<br>Nguy?n H?c Tu?n - Tr?m Tru?ng\n<br>T?ng Th? H?ng\n<br>Nguy?n Van Chung\n<br>Luu M?nh Thu?t"},"styleUrl":"#msn_ranger_station0","icon-scale":1.2,"icon-offset":[0.5,0],"icon-offset-units":["fraction","fraction"],"icon":"http://maps.google.com/mapfiles/kml/shapes/ranger_station.png"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[105.8113887446694,20.91650613891208,0]},"properties":{"name":"X? tr?m bom Hòa Bình (Vinh Trung)","visibility":false,"description":"1 c?a 1,5x3 máy dóng m? V1","styleUrl":"#msn_red-circle0","icon-scale":1.1,"icon-offset":[32,1],"icon-offset-units":["pixels","pixels"],"icon":"http://maps.google.com/mapfiles/kml/paddle/red-circle.png"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[105.811616569452,20.91646139348977,0]},"properties":{"name":"Vào b? hút tr?m bom Hòa Bình (Vinh Trung)","visibility":false,"description":{"@type":"html","value":"<img style=\"max-width:500px;\" src=\"z6813990126096_e0888447de70df17dce977205e0984f6.jpg\">\n1 c?a 1.60x1.60\nmáy dóng m? V2"},"styleUrl":"#msn_red-circle0","icon-scale":1.1,"icon-offset":[32,1],"icon-offset-units":["pixels","pixels"],"icon":"http://maps.google.com/mapfiles/kml/paddle/red-circle.png"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[105.8115327690744,20.9165323987766,0]},"properties":{"name":"C?ng B? x? 2 cánh","visibility":false,"styleUrl":"#msn_red-circle0","icon-scale":1.1,"icon-offset":[32,1],"icon-offset-units":["pixels","pixels"],"icon":"http://maps.google.com/mapfiles/kml/paddle/red-circle.png"}},{"type":"Feature","geometry":{"type":"LineString","coordinates":[[105.8359557102055,20.92998801186227,0],[105.8358727642349,20.92908065123961,0],[105.8359785100359,20.9285138909527,0],[105.8361544369972,20.92813106527878,0],[105.8363599966157,20.9278767015509,0],[105.8369038509205,20.92759762051615,0],[105.8396235779327,20.92593920107327,0],[105.839998527774,20.92560286881987,0]]},"properties":{"name":"Nguy?n Van Chung","visibility":false,"description":"Nguy?n Van Chung\nCông nhân\nÐ?i Công trình\nTuy?n sông Tô L?ch (ngân hàng - sông Om)\nÐo?n t? k2+450 dên K3+170\n720\nNg?c H?i, Nam Phù","styleUrl":"#msn_ylw-pushpin0020","stroke-opacity":1,"stroke":"#0000ff","stroke-width":5,"icon-scale":1.1,"icon-offset":[20,2],"icon-offset-units":["pixels","pixels"],"icon":"http://maps.google.com/mapfiles/kml/pushpin/ylw-pushpin.png"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[105.8359165979654,20.92952794819177,0]},"properties":{"name":"C?ng vào khu rau Ích Vinh","visibility":false,"description":"1 c?ng phi 1,2m\nk2+511","styleUrl":"#msn_blu-blank2","icon-scale":1.1,"icon-offset":[32,1],"icon-offset-units":["pixels","pixels"],"icon":"http://maps.google.com/mapfiles/kml/paddle/blu-blank.png"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[105.8126499414361,20.93330870916029,0]},"properties":{"name":"T? Thanh Oai","visibility":false,"description":{"@type":"html","value":"<img style=\"max-width:500px;\" src=\"z6812994068041_c528884764d73999b61629d9e19de271.jpg\">1 c?a 1.4x1.7\n máy dóng m? V3\nK2+670"},"styleUrl":"#msn_blu-blank2","icon-scale":1.1,"icon-offset":[32,1],"icon-offset-units":["pixels","pixels"],"icon":"http://maps.google.com/mapfiles/kml/paddle/blu-blank.png"}},{"type":"Feature","geometry":{"type":"LineString","coordinates":[[105.8155495063424,20.94150609017675,0],[105.8148779848532,20.94000328169904,0],[105.8140693156003,20.93816190576705,0],[105.813597292768,20.93714108557793,0],[105.8127787039613,20.93507772767253,0],[105.8127198037336,20.93477042541613,0],[105.812642199337,20.93433215876966,0],[105.8126495212726,20.93330114231031,0],[105.8126605294051,20.93298695321421,0]]},"properties":{"name":"T?ng Th? H?ng","visibility":false,"description":"Ngu?i ph? trách: \tT?ng Th? H?ng\nCh?c v?: \tCông nhân\nÐon v? qu?n lý: \tÐ?i Công Trình\nLo?i kênh:\tTuy?n sông Hòa Bình\nKm:\t - T? c?ng Láng Tó d?n c?ng du?ng s?t t? K1+836  d?n K2 + 836 \nChi?u dài (m) \t 1.000,0 \nÐ?a ph?n \tÐ?i Thanh, Thanh Trì","styleUrl":"#msn_ylw-pushpin000","stroke-opacity":1,"stroke":"#0000ff","stroke-width":5,"icon-scale":1.1,"icon-offset":[20,2],"icon-offset-units":["pixels","pixels"],"icon":"http://maps.google.com/mapfiles/kml/pushpin/ylw-pushpin.png"}},{"type":"Feature","geometry":{"type":"LineString","coordinates":[[105.84543858608,20.92334334674354,0],[105.8464140821801,20.92399330751998,0],[105.8469485175222,20.92428750995776,0],[105.8476826907227,20.9246344803579,0],[105.848756561055,20.92512055743018,0],[105.8492542429366,20.92508095391167,0],[105.8496855199084,20.92493058279229,0],[105.850675105266,20.92451963790009,0]]},"properties":{"name":"Luu M?nh Thu?t","visibility":false,"description":"Ngu?i ph? trách: \t + Luu M?nh Thu?t\nCh?c v?: \tCông nhân\nÐon v? qu?n lý: \tÐ?i Công trình\nLo?i kênh:\tTuy?n sông Tô L?ch (ngân hàng - sông Om)\nKm:\tÐo?n t? K3+796 dên K4+422\nChi?u dài (m) \t626\nÐ?a ph?n \tNg?c H?i, Thanh Trì","styleUrl":"#msn_ylw-pushpin0020","stroke-opacity":1,"stroke":"#0000ff","stroke-width":5,"icon-scale":1.1,"icon-offset":[20,2],"icon-offset-units":["pixels","pixels"],"icon":"http://maps.google.com/mapfiles/kml/pushpin/ylw-pushpin.png"}},{"type":"Feature","geometry":{"type":"LineString","coordinates":[[105.8380264200913,20.93544397884163,0],[105.8377309002621,20.93564128530443,0],[105.8353836551974,20.93609340618064,0],[105.8350790430817,20.93599400079842,0],[105.8318785823561,20.93564037509568,0],[105.8313640881092,20.93659132792255,0],[105.8311675771444,20.936562401096,0],[105.8310464287629,20.93687187534163,0],[105.829120644746,20.93631420365595,0],[105.8290606276185,20.93628628968682,0],[105.8290449459015,20.93606294945129,0],[105.8279269175543,20.9355148577486,0],[105.82658595532,20.93494439799767,0],[105.824205359086,20.93383320220332,0]]},"properties":{"name":"Nguy?n H?c Tu?n","visibility":false,"description":"Ngu?i ph? trách: \tNguy?n H?c Tu?n\nCh?c v?: \tTr?m tru?ng\nÐon v? qu?n lý: \tÐ?i Công Trình\nLo?i kênh: \tKênh VQ-TTO\nKm: \tT? c?ng ch? c?u Gianh d?n Sông M?t Làng Vinh Ninh (nhánh 1), do?n t? K0 d?n K1 + 658\nChi?u dài (m) \t 1,658.0 \nÐ?a ph?n \tÐ?i Thanh","styleUrl":"#msn_ylw-pushpin0020","stroke-opacity":1,"stroke":"#0000ff","stroke-width":5,"icon-scale":1.1,"icon-offset":[20,2],"icon-offset-units":["pixels","pixels"],"icon":"http://maps.google.com/mapfiles/kml/pushpin/ylw-pushpin.png"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[105.8310104543012,20.93685388327287,0]},"properties":{"name":"C?ng sau U? Ban","visibility":false,"description":{"@type":"html","value":"<img style=\"max-width:500px;\" src=\"1.jpg\">1.10x1.20\nK0+830"},"styleUrl":"#msn_blu-blank2","icon-scale":1.1,"icon-offset":[32,1],"icon-offset-units":["pixels","pixels"],"icon":"http://maps.google.com/mapfiles/kml/paddle/blu-blank.png"}}]};
+
+// =============================================
+// KHỞI TẠO SAU KHI TRANG TẢI XONG
+// =============================================
+window.addEventListener('load', function() {
+
+  // --- Bản đồ ---
+  var map = L.map('map', { zoomControl: false }).setView([20.93, 105.83], 13);
+  L.control.zoom({ position: 'bottomleft' }).addTo(map);
+
+  var tiles = {
+    osm: L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }),
+    sat: L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { maxZoom: 19 }),
+    topo: L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', { maxZoom: 17 })
+  };
+  tiles.osm.addTo(map);
+
+  document.getElementById('btnOsm').addEventListener('click', function() { setTile('osm', this); });
+  document.getElementById('btnSat').addEventListener('click', function() { setTile('sat', this); });
+  document.getElementById('btnTopo').addEventListener('click', function() { setTile('topo', this); });
+
+  function setTile(key, btn) {
+    Object.values(tiles).forEach(function(t) { if (map.hasLayer(t)) map.removeLayer(t); });
+    tiles[key].addTo(map);
+    document.querySelectorAll('.layer-btn').forEach(function(b) { b.classList.remove('active'); });
+    btn.classList.add('active');
+  }
+
+  // --- State ---
+  var kenhLayers = {};
+
+  // --- Màu ---
+  var COLORS = ['#38bdf8','#f87171','#4ade80','#facc15','#c084fc','#fb923c','#2dd4bf','#f472b6','#a3e635','#60a5fa'];
+  function mauKenh(name) {
+    var h = 0;
+    for (var i = 0; i < name.length; i++) h = name.charCodeAt(i) + ((h << 5) - h);
+    return COLORS[Math.abs(h) % COLORS.length];
+  }
+
+  // --- Tính khoảng cách dọc theo tuyến ---
+  function tinhMet(clickLL, coords) {
+    var minI = 0, minD = Infinity;
+    for (var i = 0; i < coords.length - 1; i++) {
+      var d = L.LineUtil.pointToSegmentDistance(
+        map.latLngToLayerPoint(clickLL),
+        map.latLngToLayerPoint(coords[i]),
+        map.latLngToLayerPoint(coords[i+1])
+      );
+      if (d < minD) { minD = d; minI = i; }
+    }
+    var total = 0;
+    for (var j = 0; j < minI; j++) total += coords[j].distanceTo(coords[j+1]);
+    total += coords[minI].distanceTo(clickLL);
+    return total;
+  }
+
+  function tongDai(coords) {
+    var t = 0;
+    for (var i = 0; i < coords.length - 1; i++) t += coords[i].distanceTo(coords[i+1]);
+    return t;
+  }
+
+  function toKM(m) {
+    return 'K' + Math.floor(m/1000) + '+' + String(Math.round(m%1000)).padStart(3,'0');
+  }
+
+  // --- Popup ---
+  function moPopup(feature, layer, latlng) {
+    var coords = layer.getLatLngs();
+    var met = tinhMet(latlng, coords);
+    var tong = tongDai(coords);
+    var desc = feature.properties.description || '';
+    if (typeof desc === 'object' && desc && desc.value) desc = desc.value.replace(/<[^>]+>/g,'').trim();
+    if (typeof desc !== 'string') desc = '';
+
+    var html = '<div class="my-popup">'
+      + '<div class="p-title">📋 ' + feature.properties.name + '</div>'
+      + '<div class="p-km">' + toKM(met) + '</div>'
+      + '<div class="p-row">📍 Cách đầu tuyến: <b>' + met.toFixed(0) + ' m</b></div>'
+      + '<div class="p-row">📏 Tổng chiều dài: <b>' + tong.toFixed(0) + ' m (' + (tong/1000).toFixed(2) + ' km)</b></div>'
+      + '<div class="p-row">🌐 Tọa độ: <b>' + latlng.lat.toFixed(6) + ', ' + latlng.lng.toFixed(6) + '</b></div>'
+      + (desc ? '<div class="p-desc">' + desc.substring(0,300) + '</div>' : '')
+      + '</div>';
+
+    L.popup({ maxWidth: 280 }).setLatLng(latlng).setContent(html).openOn(map);
+  }
+
+  // --- Cập nhật stats ---
+  function updateStats() {
+    var keys = Object.keys(kenhLayers);
+    var vis = keys.filter(function(k) { return kenhLayers[k].visible; }).length;
+    document.getElementById('sVis').textContent = vis;
+    document.getElementById('sHid').textContent = keys.length - vis;
+    document.getElementById('sTot').textContent = keys.length;
+    document.getElementById('subTitle').textContent = keys.length + ' tuyến kênh';
+  }
+
+  // --- Ẩn/hiện ---
+  function setVisible(name, show) {
+    var k = kenhLayers[name];
+    if (!k) return;
+    k.visible = show;
+    if (show) { if (!map.hasLayer(k.layer)) k.layer.addTo(map); }
+    else { if (map.hasLayer(k.layer)) map.removeLayer(k.layer); }
+    if (k.item) {
+      k.item.classList.toggle('hidden-layer', !show);
+      k.item.querySelector('.eye-btn').textContent = show ? '👁️' : '🙈';
+    }
+    updateStats();
+  }
+
+  document.getElementById('btnHienTat').addEventListener('click', function() {
+    Object.keys(kenhLayers).forEach(function(n) { setVisible(n, true); });
+  });
+  document.getElementById('btnAnTat').addEventListener('click', function() {
+    Object.keys(kenhLayers).forEach(function(n) { setVisible(n, false); });
+  });
+
+  // --- Tìm kiếm ---
+  document.getElementById('searchInput').addEventListener('input', function() {
+    var q = this.value.toLowerCase();
+    document.querySelectorAll('.kenh-item').forEach(function(el) {
+      el.style.display = el.dataset.search.includes(q) ? '' : 'none';
+    });
+  });
+
+  // --- Sidebar toggle (mobile) ---
+  var sidebarOpen = true;
+  document.getElementById('btnToggle').addEventListener('click', function() {
+    sidebarOpen = !sidebarOpen;
+    document.getElementById('sidebar').classList.toggle('hidden', !sidebarOpen);
+    this.classList.toggle('open', sidebarOpen);
+    this.textContent = sidebarOpen ? '✕' : '☰';
+  });
+
+  // --- GPS ---
+  var gpsMarker = null, gpsCircle = null;
+  document.getElementById('btnGPS').addEventListener('click', function() {
+    if (!navigator.geolocation) return alert('Thiết bị không hỗ trợ GPS!');
+    map.locate({ setView: true, maxZoom: 17, enableHighAccuracy: true });
+  });
+  map.on('locationfound', function(e) {
+    if (gpsMarker) { map.removeLayer(gpsMarker); map.removeLayer(gpsCircle); }
+    gpsMarker = L.marker(e.latlng, {
+      icon: L.divIcon({ className: 'gps-dot', iconSize: [14,14], iconAnchor: [7,7] })
+    }).addTo(map).bindPopup(
+      '<div style="padding:8px 10px;font-size:12px;"><b>📍 Vị trí của bạn</b><br>'
+      + e.latlng.lat.toFixed(6) + ', ' + e.latlng.lng.toFixed(6)
+      + '<br><small>±' + e.accuracy.toFixed(0) + ' m</small></div>'
+    ).openPopup();
+    gpsCircle = L.circle(e.latlng, { radius: e.accuracy, color: '#38bdf8', fillColor: '#38bdf8', fillOpacity: 0.08, weight: 1 }).addTo(map);
+  });
+  map.on('locationerror', function() { alert('Không lấy được vị trí GPS.'); });
+
+  // =============================================
+  // HÀM LOAD GEOJSON (dùng cho cả data gốc lẫn file upload)
+  // =============================================
+  function loadGeoJSON(data, tenNhom) {
+    if (!data || !Array.isArray(data.features)) return;
+
+    var listEl = document.getElementById('danhSachKenh');
+
+    // Header nhóm
+    if (tenNhom) {
+      var hdr = document.createElement('div');
+      hdr.className = 'nhom-header';
+      hdr.textContent = '📁 ' + tenNhom;
+      listEl.appendChild(hdr);
+    }
+
+    // Points
+    data.features.forEach(function(f) {
+      if (!f.geometry || f.geometry.type !== 'Point') return;
+      var desc = f.properties.description || '';
+      if (typeof desc === 'object' && desc && desc.value) desc = desc.value.replace(/<[^>]+>/g,'').trim();
+      if (typeof desc !== 'string') desc = '';
+      L.circleMarker([f.geometry.coordinates[1], f.geometry.coordinates[0]], {
+        radius: 6, fillColor: '#facc15', color: '#1e293b', weight: 1.5, fillOpacity: 0.95
+      }).bindPopup(
+        '<div style="padding:10px 12px;font-size:12px;"><b>' + (f.properties.name||'') + '</b>'
+        + (desc ? '<br><span style="color:#555;font-size:11px;">' + desc.substring(0,200) + '</span>' : '')
+        + '</div>'
+      ).addTo(map);
+    });
+
+    // LineStrings
+    var lines = data.features.filter(function(f) { return f.geometry && f.geometry.type === 'LineString'; });
+    lines.sort(function(a,b) { return (a.properties.name||'').localeCompare(b.properties.name||'','vi'); });
+
+    lines.forEach(function(f) {
+      var name = f.properties.name || ('Kênh ' + (Object.keys(kenhLayers).length + 1));
+      var color = mauKenh(name);
+      var desc = f.properties.description || '';
+      if (typeof desc === 'object' && desc && desc.value) desc = desc.value.replace(/<[^>]+>/g,'').trim();
+      if (typeof desc !== 'string') desc = '';
+
+      // Tránh trùng tên
+      var key = name, n = 2;
+      while (kenhLayers[key]) key = name + ' (' + (n++) + ')';
+
+      var gl = L.geoJSON(f, { style: { color: color, weight: 4, opacity: 0.9, lineJoin: 'round', lineCap: 'round' } });
+      gl.on('click', function(e) { moPopup(f, gl.getLayers()[0], e.latlng); });
+      gl.on('mouseover', function() { gl.setStyle({ weight: 7 }); });
+      gl.on('mouseout',  function() { gl.setStyle({ weight: 4 }); });
+      gl.addTo(map);
+
+      kenhLayers[key] = { layer: gl, visible: true };
+
+      // List item
+      var item = document.createElement('div');
+      item.className = 'kenh-item';
+      item.dataset.search = (key + ' ' + desc).toLowerCase();
+
+      var safe = key.replace(/&/g,'&amp;').replace(/"/g,'&quot;');
+      item.innerHTML =
+        '<span class="kenh-color" style="background:' + color + '"></span>'
+        + '<div class="kenh-info">'
+        +   '<div class="kenh-name">' + key + '</div>'
+        +   '<div class="kenh-meta">' + (desc.substring(0,60) || '—') + '</div>'
+        + '</div>'
+        + '<button class="icon-btn" title="Zoom" data-n="' + safe + '">🔍</button>'
+        + '<button class="icon-btn eye-btn" title="Ẩn/Hiện" data-n="' + safe + '">👁️</button>';
+
+      item.querySelector('[title="Zoom"]').addEventListener('click', function(e) {
+        e.stopPropagation(); zoomToi(this.dataset.n);
+      });
+      item.querySelector('.eye-btn').addEventListener('click', function(e) {
+        e.stopPropagation();
+        var nm = this.dataset.n;
+        setVisible(nm, !kenhLayers[nm].visible);
+      });
+      item.addEventListener('click', function() {
+        zoomToi(key);
+        var lyr = kenhLayers[key].layer.getLayers()[0];
+        var coords = lyr.getLatLngs();
+        moPopup(f, lyr, coords[Math.floor(coords.length/2)]);
+      });
+
+      listEl.appendChild(item);
+      kenhLayers[key].item = item;
+    });
+
+    // Fit bounds
+    var allLayers = Object.values(kenhLayers);
+    if (allLayers.length) {
+      try {
+        var bounds = allLayers[0].layer.getBounds();
+        for (var i = 1; i < allLayers.length; i++) bounds.extend(allLayers[i].layer.getBounds());
+        map.fitBounds(bounds, { padding: [20,20] });
+      } catch(e) {}
+    }
+    updateStats();
+  }
+
+  function zoomToi(name) {
+    var k = kenhLayers[name];
+    if (!k) return;
+    if (!k.visible) setVisible(name, true);
+    map.fitBounds(k.layer.getBounds(), { maxZoom: 16, padding: [30,30] });
+  }
+
+  // =============================================
+  // UPLOAD FILE GEOJSON MỚI
+  // =============================================
+  document.getElementById('fileInput').addEventListener('change', function(e) {
+    var files = Array.from(e.target.files);
+    if (!files.length) return;
+    var count = 0;
+    files.forEach(function(file) {
+      var reader = new FileReader();
+      reader.onload = function(ev) {
+        try {
+          var data = JSON.parse(ev.target.result);
+          var ten = file.name.replace(/\.geojson$/i,'').replace(/\.json$/i,'');
+          loadGeoJSON(data, ten);
+          count++;
+          if (count === files.length) {
+            var tb = document.getElementById('thongBao');
+            tb.textContent = '\u2705 Đã tải ' + count + ' file';
+            setTimeout(function() { tb.textContent = ''; }, 3000);
+          }
+        } catch(err) {
+          alert('File "' + file.name + '" lỗi: ' + err.message);
+        }
+      };
+      reader.readAsText(file, 'UTF-8');
+    });
+    e.target.value = '';
+  });
+
+  // =============================================
+  // LOAD DỮ LIỆU GỐC
+  // =============================================
+  loadGeoJSON(DATA_GOC, null);
+
+}); // end window.load
+</script>
+</body>
+</html>
